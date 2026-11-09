@@ -1,0 +1,4549 @@
+{
+ "name": "open",
+ "title": "Open_Edit built-in asset pack",
+ "version": 1,
+ "license": "MIT",
+ "kinds": {
+  "brand": {
+   "mark": {
+    "path": "brand/mark.svg"
+   },
+   "mark-mono": {
+    "path": "brand/mark-mono.svg"
+   },
+   "wordmark": {
+    "path": "brand/wordmark.svg"
+   },
+   "icon": {
+    "path": "brand/icon.svg"
+   },
+   "icon-maskable": {
+    "path": "brand/icon-maskable.svg"
+   },
+   "icon-192": {
+    "path": "brand/icon-192.png"
+   },
+   "icon-512": {
+    "path": "brand/icon-512.png"
+   },
+   "icon-maskable-512": {
+    "path": "brand/icon-maskable-512.png"
+   },
+   "apple-touch-icon": {
+    "path": "brand/apple-touch-icon.png"
+   },
+   "favicon": {
+    "path": "brand/favicon.svg"
+   },
+   "favicon-32": {
+    "path": "brand/favicon-32.png"
+   },
+   "favicon-ico": {
+    "path": "brand/favicon.ico"
+   }
+  },
+  "filter": {
+   "natural": {
+    "path": "filters/natural.png",
+    "meta": {
+     "name": "Natural",
+     "group": "everyday",
+     "strength": 0.6
+    }
+   },
+   "clean": {
+    "path": "filters/clean.png",
+    "meta": {
+     "name": "Clean",
+     "group": "everyday",
+     "strength": 0.7
+    }
+   },
+   "bright": {
+    "path": "filters/bright.png",
+    "meta": {
+     "name": "Bright",
+     "group": "everyday",
+     "strength": 0.7
+    }
+   },
+   "peach": {
+    "path": "filters/peach.png",
+    "meta": {
+     "name": "Peach",
+     "group": "everyday",
+     "strength": 0.7
+    }
+   },
+   "cream": {
+    "path": "filters/cream.png",
+    "meta": {
+     "name": "Cream",
+     "group": "everyday",
+     "strength": 0.7
+    }
+   },
+   "mint": {
+    "path": "filters/mint.png",
+    "meta": {
+     "name": "Mint",
+     "group": "everyday",
+     "strength": 0.7
+    }
+   },
+   "warm-film": {
+    "path": "filters/warm-film.png",
+    "meta": {
+     "name": "Warm Film",
+     "group": "film",
+     "strength": 0.8
+    }
+   },
+   "cool-matte": {
+    "path": "filters/cool-matte.png",
+    "meta": {
+     "name": "Cool Matte",
+     "group": "film",
+     "strength": 0.8
+    }
+   },
+   "fade": {
+    "path": "filters/fade.png",
+    "meta": {
+     "name": "Fade",
+     "group": "film",
+     "strength": 0.8
+    }
+   },
+   "retro": {
+    "path": "filters/retro.png",
+    "meta": {
+     "name": "Retro",
+     "group": "film",
+     "strength": 0.8
+    }
+   },
+   "golden": {
+    "path": "filters/golden.png",
+    "meta": {
+     "name": "Golden",
+     "group": "film",
+     "strength": 0.8
+    }
+   },
+   "polaroid": {
+    "path": "filters/polaroid.png",
+    "meta": {
+     "name": "Instant",
+     "group": "film",
+     "strength": 0.8
+    }
+   },
+   "dusk": {
+    "path": "filters/dusk.png",
+    "meta": {
+     "name": "Dusk",
+     "group": "mood",
+     "strength": 0.8
+    }
+   },
+   "cinema": {
+    "path": "filters/cinema.png",
+    "meta": {
+     "name": "Cinema",
+     "group": "mood",
+     "strength": 0.75
+    }
+   },
+   "ocean": {
+    "path": "filters/ocean.png",
+    "meta": {
+     "name": "Ocean",
+     "group": "mood",
+     "strength": 0.8
+    }
+   },
+   "forest": {
+    "path": "filters/forest.png",
+    "meta": {
+     "name": "Forest",
+     "group": "mood",
+     "strength": 0.8
+    }
+   },
+   "lilac": {
+    "path": "filters/lilac.png",
+    "meta": {
+     "name": "Lilac",
+     "group": "mood",
+     "strength": 0.75
+    }
+   },
+   "rose": {
+    "path": "filters/rose.png",
+    "meta": {
+     "name": "Rose",
+     "group": "mood",
+     "strength": 0.75
+    }
+   },
+   "mono": {
+    "path": "filters/mono.png",
+    "meta": {
+     "name": "Mono",
+     "group": "mono",
+     "strength": 1
+    }
+   },
+   "noir": {
+    "path": "filters/noir.png",
+    "meta": {
+     "name": "Noir",
+     "group": "mono",
+     "strength": 1
+    }
+   },
+   "silver": {
+    "path": "filters/silver.png",
+    "meta": {
+     "name": "Silver",
+     "group": "mono",
+     "strength": 1
+    }
+   },
+   "sepia": {
+    "path": "filters/sepia.png",
+    "meta": {
+     "name": "Sepia",
+     "group": "mono",
+     "strength": 0.9
+    }
+   }
+  },
+  "filter-thumb": {
+   "original": {
+    "path": "filters/thumbs/original.png"
+   },
+   "natural": {
+    "path": "filters/thumbs/natural.png"
+   },
+   "clean": {
+    "path": "filters/thumbs/clean.png"
+   },
+   "bright": {
+    "path": "filters/thumbs/bright.png"
+   },
+   "peach": {
+    "path": "filters/thumbs/peach.png"
+   },
+   "cream": {
+    "path": "filters/thumbs/cream.png"
+   },
+   "mint": {
+    "path": "filters/thumbs/mint.png"
+   },
+   "warm-film": {
+    "path": "filters/thumbs/warm-film.png"
+   },
+   "cool-matte": {
+    "path": "filters/thumbs/cool-matte.png"
+   },
+   "fade": {
+    "path": "filters/thumbs/fade.png"
+   },
+   "retro": {
+    "path": "filters/thumbs/retro.png"
+   },
+   "golden": {
+    "path": "filters/thumbs/golden.png"
+   },
+   "polaroid": {
+    "path": "filters/thumbs/polaroid.png"
+   },
+   "dusk": {
+    "path": "filters/thumbs/dusk.png"
+   },
+   "cinema": {
+    "path": "filters/thumbs/cinema.png"
+   },
+   "ocean": {
+    "path": "filters/thumbs/ocean.png"
+   },
+   "forest": {
+    "path": "filters/thumbs/forest.png"
+   },
+   "lilac": {
+    "path": "filters/thumbs/lilac.png"
+   },
+   "rose": {
+    "path": "filters/thumbs/rose.png"
+   },
+   "mono": {
+    "path": "filters/thumbs/mono.png"
+   },
+   "noir": {
+    "path": "filters/thumbs/noir.png"
+   },
+   "silver": {
+    "path": "filters/thumbs/silver.png"
+   },
+   "sepia": {
+    "path": "filters/thumbs/sepia.png"
+   }
+  },
+  "table": {
+   "identity": {
+    "path": "tables/identity.png"
+   },
+   "whiten": {
+    "path": "tables/whiten.png"
+   },
+   "skin-warm": {
+    "path": "tables/skin-warm.png"
+   },
+   "skin-cool": {
+    "path": "tables/skin-cool.png"
+   },
+   "skin-light": {
+    "path": "tables/skin-light.png"
+   },
+   "skin-tan": {
+    "path": "tables/skin-tan.png"
+   },
+   "skintone-fair-skin": {
+    "path": "tables/skintone-fair-skin.png"
+   },
+   "skintone-fair-bg": {
+    "path": "tables/skintone-fair-bg.png"
+   },
+   "skintone-rosy-skin": {
+    "path": "tables/skintone-rosy-skin.png"
+   },
+   "skintone-rosy-bg": {
+    "path": "tables/skintone-rosy-bg.png"
+   },
+   "skintone-golden-skin": {
+    "path": "tables/skintone-golden-skin.png"
+   },
+   "skintone-golden-bg": {
+    "path": "tables/skintone-golden-bg.png"
+   },
+   "skintone-tan-skin": {
+    "path": "tables/skintone-tan-skin.png"
+   },
+   "skintone-tan-bg": {
+    "path": "tables/skintone-tan-bg.png"
+   },
+   "skintone-deep-skin": {
+    "path": "tables/skintone-deep-skin.png"
+   },
+   "skintone-deep-bg": {
+    "path": "tables/skintone-deep-bg.png"
+   },
+   "grain": {
+    "path": "tables/grain.png"
+   }
+  },
+  "sticker": {
+   "sparkles": {
+    "path": "stickers/sparkles/",
+    "meta": {
+     "id": 101,
+     "name": "Sparkles",
+     "def": {
+      "stickerId": 101,
+      "name": "Sparkles",
+      "items": [
+       {
+        "id": "halo",
+        "drawType": "FACE",
+        "triggerType": "FACE_DETECT",
+        "faceLocationType": "HEAD_TOP",
+        "anchorType": "CENTER",
+        "translateY": 0.35,
+        "scale": 3.6,
+        "resourceType": "SEQUENCE",
+        "frames": [
+         "sparkles/f_00.svg",
+         "sparkles/f_01.svg",
+         "sparkles/f_02.svg",
+         "sparkles/f_03.svg",
+         "sparkles/f_04.svg",
+         "sparkles/f_05.svg",
+         "sparkles/f_06.svg",
+         "sparkles/f_07.svg"
+        ],
+        "fps": 10
+       }
+      ]
+     }
+    }
+   },
+   "hearts": {
+    "path": "stickers/hearts/",
+    "meta": {
+     "id": 102,
+     "name": "Hearts",
+     "def": {
+      "stickerId": 102,
+      "name": "Hearts",
+      "items": [
+       {
+        "id": "float",
+        "drawType": "FACE",
+        "triggerType": "FACE_DETECT",
+        "faceLocationType": "FACE_CENTER",
+        "anchorType": "CENTER",
+        "scale": 3.6,
+        "rotationMode": "INVARIANT",
+        "resourceType": "SEQUENCE",
+        "frames": [
+         "hearts/f_00.svg",
+         "hearts/f_01.svg",
+         "hearts/f_02.svg",
+         "hearts/f_03.svg",
+         "hearts/f_04.svg",
+         "hearts/f_05.svg",
+         "hearts/f_06.svg",
+         "hearts/f_07.svg",
+         "hearts/f_08.svg",
+         "hearts/f_09.svg",
+         "hearts/f_10.svg",
+         "hearts/f_11.svg"
+        ],
+        "fps": 12
+       }
+      ],
+      "makeup": {
+       "layers": [
+        {
+         "region": "blush",
+         "color": "#ff8fa8",
+         "blend": "multiply",
+         "opacity": 0.35
+        }
+       ]
+      }
+     }
+    }
+   },
+   "cat": {
+    "path": "stickers/cat/",
+    "meta": {
+     "id": 103,
+     "name": "Kitty",
+     "def": {
+      "stickerId": 103,
+      "name": "Kitty",
+      "items": [
+       {
+        "id": "head",
+        "drawType": "OCCLUDER"
+       },
+       {
+        "id": "ears",
+        "drawType": "FACE_3D",
+        "triggerType": "FACE_DETECT",
+        "faceLocationType": "HEAD_TOP",
+        "anchorType": "BOTTOM",
+        "translateY": 0.6,
+        "translateZ": -0.25,
+        "scale": 2.7,
+        "resourceType": "IMAGE",
+        "resourceName": "cat/ears.svg"
+       },
+       {
+        "id": "nose",
+        "drawType": "FACE",
+        "triggerType": "FACE_DETECT",
+        "faceLocationType": "NOSE",
+        "anchorType": "CENTER",
+        "translateY": 0.12,
+        "scale": 1.9,
+        "resourceType": "IMAGE",
+        "resourceName": "cat/nose.svg"
+       }
+      ]
+     }
+    }
+   },
+   "shades": {
+    "path": "stickers/shades/",
+    "meta": {
+     "id": 104,
+     "name": "Shades",
+     "def": {
+      "stickerId": 104,
+      "name": "Shades",
+      "items": [
+       {
+        "id": "glasses",
+        "drawType": "FACE_3D",
+        "triggerType": "FACE_DETECT",
+        "faceLocationType": "EYES_CENTER",
+        "anchorType": "CENTER",
+        "translateY": 0.03,
+        "translateZ": 0.15,
+        "scale": 2.5,
+        "resourceType": "IMAGE",
+        "resourceName": "shades/glasses.svg"
+       }
+      ]
+     }
+    }
+   },
+   "glitter": {
+    "path": "stickers/glitter/",
+    "meta": {
+     "id": 105,
+     "name": "Glitter",
+     "def": {
+      "stickerId": 105,
+      "name": "Glitter",
+      "items": [
+       {
+        "id": "glitter",
+        "drawType": "FACE_MASK",
+        "triggerType": "FACE_DETECT",
+        "blendType": "SCREEN",
+        "resourceType": "IMAGE",
+        "resourceName": "glitter/face.svg"
+       }
+      ],
+      "makeup": {
+       "layers": [
+        {
+         "region": "lips",
+         "color": "#d46a7e",
+         "blend": "multiply",
+         "opacity": 0.25
+        },
+        {
+         "region": "lips",
+         "lipGloss": "glitter",
+         "color": "#ffe9f0",
+         "opacity": 0.8
+        }
+       ]
+      }
+     }
+    }
+   },
+   "scan": {
+    "path": "stickers/scan/",
+    "meta": {
+     "id": 106,
+     "name": "Mesh scan",
+     "def": {
+      "stickerId": 106,
+      "name": "Mesh scan",
+      "items": [
+       {
+        "id": "mesh",
+        "drawType": "FACE_MASK",
+        "triggerType": "FACE_DETECT",
+        "blendType": "SCREEN",
+        "resourceType": "SEQUENCE",
+        "frames": [
+         "scan/f_00.svg",
+         "scan/f_01.svg",
+         "scan/f_02.svg",
+         "scan/f_03.svg",
+         "scan/f_04.svg",
+         "scan/f_05.svg",
+         "scan/f_06.svg",
+         "scan/f_07.svg",
+         "scan/f_08.svg",
+         "scan/f_09.svg"
+        ],
+        "fps": 12
+       }
+      ]
+     }
+    }
+   },
+   "freckles": {
+    "path": "stickers/freckles/",
+    "meta": {
+     "id": 107,
+     "name": "Freckles",
+     "def": {
+      "stickerId": 107,
+      "name": "Freckles",
+      "items": [
+       {
+        "id": "freckles",
+        "drawType": "FACE_MASK",
+        "triggerType": "FACE_DETECT",
+        "blendType": "MULTIPLY",
+        "resourceType": "IMAGE",
+        "resourceName": "freckles/face.svg"
+       }
+      ]
+     }
+    }
+   },
+   "sky-lens": {
+    "path": "stickers/sky-lens/",
+    "meta": {
+     "id": 108,
+     "name": "Sky lens",
+     "def": {
+      "stickerId": 108,
+      "name": "Sky lens",
+      "items": [
+       {
+        "id": "lens",
+        "drawType": "COLOR_LENS",
+        "triggerType": "FACE_DETECT",
+        "color": "#4a9ae0",
+        "pattern": "starburst",
+        "blendType": "COLOR",
+        "alpha": 0.75
+       }
+      ]
+     }
+    }
+   },
+   "amber-lens": {
+    "path": "stickers/amber-lens/",
+    "meta": {
+     "id": 109,
+     "name": "Amber lens",
+     "def": {
+      "stickerId": 109,
+      "name": "Amber lens",
+      "items": [
+       {
+        "id": "lens",
+        "drawType": "COLOR_LENS",
+        "triggerType": "FACE_DETECT",
+        "color": "#c8862e",
+        "pattern": "ring",
+        "blendType": "SOFTLIGHT",
+        "alpha": 0.9
+       }
+      ]
+     }
+    }
+   },
+   "starlight": {
+    "path": "stickers/starlight/",
+    "meta": {
+     "id": 110,
+     "name": "Starlight eyes",
+     "def": {
+      "stickerId": 110,
+      "name": "Starlight eyes",
+      "items": [],
+      "makeup": {
+       "layers": [
+        {
+         "region": "lens",
+         "style": "catch-star",
+         "color": "#ffffff",
+         "blend": "screen",
+         "opacity": 0.95
+        },
+        {
+         "region": "lens",
+         "style": "ring",
+         "color": "#8a7ab8",
+         "blend": "softlight",
+         "opacity": 0.5
+        }
+       ]
+      }
+     }
+    }
+   },
+   "glam": {
+    "path": "stickers/glam/",
+    "meta": {
+     "id": 111,
+     "name": "Glam",
+     "def": {
+      "stickerId": 111,
+      "name": "Glam",
+      "items": [],
+      "makeup": {
+       "layers": [
+        {
+         "region": "lips",
+         "color": "#b4202e",
+         "blend": "multiply",
+         "opacity": 0.55,
+         "gloss": 0.2
+        },
+        {
+         "region": "eyeshadow",
+         "color": "#9a6233",
+         "blend": "multiply",
+         "opacity": 0.5
+        },
+        {
+         "region": "eyeshadow",
+         "color": "#ffd9a0",
+         "blend": "screen",
+         "opacity": 0.2
+        },
+        {
+         "region": "eyeliner",
+         "color": "#141010",
+         "blend": "multiply",
+         "opacity": 0.8,
+         "style": "wing"
+        },
+        {
+         "region": "lashes",
+         "color": "#120c0a",
+         "opacity": 0.85,
+         "lash3d": {
+          "length": 1.1,
+          "density": 42,
+          "curl": 0.75
+         }
+        },
+        {
+         "region": "blush",
+         "color": "#e8806e",
+         "blend": "multiply",
+         "opacity": 0.3,
+         "style": "lifted"
+        },
+        {
+         "region": "contour",
+         "color": "#7a4c3a",
+         "blend": "multiply",
+         "opacity": 0.25,
+         "style": "sculpt"
+        },
+        {
+         "region": "highlight",
+         "color": "#fff1e0",
+         "blend": "screen",
+         "opacity": 0.25
+        }
+       ],
+       "teethWhiten": 0.3
+      }
+     }
+    }
+   },
+   "doll-lashes": {
+    "path": "stickers/doll-lashes/",
+    "meta": {
+     "id": 112,
+     "name": "Doll lashes",
+     "def": {
+      "stickerId": 112,
+      "name": "Doll lashes",
+      "items": [],
+      "makeup": {
+       "layers": [
+        {
+         "region": "lashes",
+         "color": "#120c0a",
+         "opacity": 0.95,
+         "lash3d": {
+          "length": 1.35,
+          "density": 46,
+          "curl": 0.9,
+          "flare": 0.2
+         }
+        },
+        {
+         "region": "eyeliner",
+         "color": "#1a1414",
+         "blend": "multiply",
+         "opacity": 0.5,
+         "style": "thin"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "big-eyes": {
+    "path": "stickers/big-eyes/",
+    "meta": {
+     "id": 113,
+     "name": "Big eyes",
+     "def": {
+      "stickerId": 113,
+      "name": "Big eyes",
+      "items": [
+       {
+        "id": "reshape",
+        "drawType": "BUILT_IN",
+        "triggerType": "FACE_DETECT"
+       }
+      ],
+      "shape": {
+       "eyeSize": 0.5,
+       "pupil": 0.25,
+       "faceSlim": 0.3,
+       "noseWidth": -0.2,
+       "chinLength": 0.1,
+       "mouthSize": -0.1
+      }
+     }
+    }
+   },
+   "dreamy": {
+    "path": "stickers/dreamy/",
+    "meta": {
+     "id": 114,
+     "name": "Dreamy sky",
+     "def": {
+      "stickerId": 114,
+      "name": "Dreamy sky",
+      "items": [
+       {
+        "id": "sky",
+        "drawType": "BACKGROUND",
+        "triggerType": "ALWAYS",
+        "segmentation": {
+         "target": "background"
+        },
+        "resourceType": "IMAGE",
+        "resourceName": "dreamy/sky.svg"
+       }
+      ]
+     }
+    }
+   },
+   "pop": {
+    "path": "stickers/pop/",
+    "meta": {
+     "id": 115,
+     "name": "Mouth pop",
+     "def": {
+      "stickerId": 115,
+      "name": "Mouth pop",
+      "items": [
+       {
+        "id": "burst",
+        "drawType": "FACE",
+        "triggerType": "MOUTH_OPEN_BEGIN",
+        "faceLocationType": "MOUTH",
+        "anchorType": "CENTER",
+        "scale": 4.2,
+        "rotationMode": "INVARIANT",
+        "repeatCount": 1,
+        "resourceType": "SEQUENCE",
+        "frames": [
+         "pop/f_00.svg",
+         "pop/f_01.svg",
+         "pop/f_02.svg",
+         "pop/f_03.svg",
+         "pop/f_04.svg",
+         "pop/f_05.svg",
+         "pop/f_06.svg",
+         "pop/f_07.svg",
+         "pop/f_08.svg",
+         "pop/f_09.svg",
+         "pop/f_10.svg",
+         "pop/f_11.svg"
+        ],
+        "fps": 18
+       }
+      ]
+     }
+    }
+   }
+  },
+  "sticker-thumb": {
+   "sparkles": {
+    "path": "stickers/sparkles/thumb.svg"
+   },
+   "hearts": {
+    "path": "stickers/hearts/thumb.svg"
+   },
+   "cat": {
+    "path": "stickers/cat/thumb.svg"
+   },
+   "shades": {
+    "path": "stickers/shades/thumb.svg"
+   },
+   "glitter": {
+    "path": "stickers/glitter/thumb.svg"
+   },
+   "scan": {
+    "path": "stickers/scan/thumb.svg"
+   },
+   "freckles": {
+    "path": "stickers/freckles/thumb.svg"
+   },
+   "sky-lens": {
+    "path": "stickers/sky-lens/thumb.svg"
+   },
+   "amber-lens": {
+    "path": "stickers/amber-lens/thumb.svg"
+   },
+   "starlight": {
+    "path": "stickers/starlight/thumb.svg"
+   },
+   "glam": {
+    "path": "stickers/glam/thumb.svg"
+   },
+   "doll-lashes": {
+    "path": "stickers/doll-lashes/thumb.svg"
+   },
+   "big-eyes": {
+    "path": "stickers/big-eyes/thumb.svg"
+   },
+   "dreamy": {
+    "path": "stickers/dreamy/thumb.svg"
+   },
+   "pop": {
+    "path": "stickers/pop/thumb.svg"
+   }
+  },
+  "root": {
+   "stickers": {
+    "path": "stickers/"
+   }
+  },
+  "brush": {
+   "round": {
+    "path": "brushes/round.png"
+   },
+   "soft": {
+    "path": "brushes/soft.png"
+   },
+   "marker": {
+    "path": "brushes/marker.png"
+   },
+   "marker-soft": {
+    "path": "brushes/marker-soft.png"
+   },
+   "neon": {
+    "path": "brushes/neon.png"
+   },
+   "dashed": {
+    "path": "brushes/dashed.png"
+   },
+   "spray": {
+    "path": "brushes/spray.png"
+   }
+  },
+  "font": {
+   "inter": {
+    "path": "fonts/inter.woff2",
+    "license": "OFL-1.1",
+    "meta": {
+     "family": "Inter",
+     "weight": "100 900",
+     "licenseFile": "fonts/inter-OFL.txt"
+    }
+   },
+   "space-grotesk": {
+    "path": "fonts/space-grotesk.woff2",
+    "license": "OFL-1.1",
+    "meta": {
+     "family": "Space Grotesk",
+     "weight": "300 700",
+     "licenseFile": "fonts/space-grotesk-OFL.txt"
+    }
+   },
+   "playfair": {
+    "path": "fonts/playfair.woff2",
+    "license": "OFL-1.1",
+    "meta": {
+     "family": "Playfair Display",
+     "weight": "700",
+     "licenseFile": "fonts/playfair-OFL.txt"
+    }
+   },
+   "caveat": {
+    "path": "fonts/caveat.woff2",
+    "license": "OFL-1.1",
+    "meta": {
+     "family": "Caveat",
+     "weight": "600",
+     "licenseFile": "fonts/caveat-OFL.txt"
+    }
+   },
+   "pacifico": {
+    "path": "fonts/pacifico.woff2",
+    "license": "OFL-1.1",
+    "meta": {
+     "family": "Pacifico",
+     "weight": "400",
+     "licenseFile": "fonts/pacifico-OFL.txt"
+    }
+   },
+   "bebas-neue": {
+    "path": "fonts/bebas-neue.woff2",
+    "license": "OFL-1.1",
+    "meta": {
+     "family": "Bebas Neue",
+     "weight": "400",
+     "licenseFile": "fonts/bebas-neue-OFL.txt"
+    }
+   },
+   "dm-mono": {
+    "path": "fonts/dm-mono.woff2",
+    "license": "OFL-1.1",
+    "meta": {
+     "family": "DM Mono",
+     "weight": "500",
+     "licenseFile": "fonts/dm-mono-OFL.txt"
+    }
+   }
+  },
+  "collage": {
+   "grid-2": {
+    "path": "collage/grid-2.json",
+    "meta": {
+     "photos": 2,
+     "layouts": [
+      [
+       [
+        0,
+        0,
+        0.5,
+        1
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        1,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        1
+       ],
+       [
+        0.3333,
+        0,
+        0.6667,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        1,
+        0.6667
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.6667,
+        1
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.6667
+       ],
+       [
+        0,
+        0.6667,
+        1,
+        0.3333
+       ]
+      ]
+     ]
+    }
+   },
+   "grid-3": {
+    "path": "collage/grid-3.json",
+    "meta": {
+     "photos": 3,
+     "layouts": [
+      [
+       [
+        0,
+        0,
+        0.3333,
+        1
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        1
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        1,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        1,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        1
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        1,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.25
+       ],
+       [
+        0,
+        0.25,
+        1,
+        0.5
+       ],
+       [
+        0,
+        0.75,
+        1,
+        0.25
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.25,
+        1
+       ],
+       [
+        0.25,
+        0,
+        0.5,
+        1
+       ],
+       [
+        0.75,
+        0,
+        0.25,
+        1
+       ]
+      ]
+     ]
+    }
+   },
+   "grid-4": {
+    "path": "collage/grid-4.json",
+    "meta": {
+     "photos": 4,
+     "layouts": [
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.25,
+        1
+       ],
+       [
+        0.25,
+        0,
+        0.25,
+        1
+       ],
+       [
+        0.5,
+        0,
+        0.25,
+        1
+       ],
+       [
+        0.75,
+        0,
+        0.25,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.25
+       ],
+       [
+        0,
+        0.25,
+        1,
+        0.25
+       ],
+       [
+        0,
+        0.5,
+        1,
+        0.25
+       ],
+       [
+        0,
+        0.75,
+        1,
+        0.25
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        1
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.5,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        1,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.6667,
+        1
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.6667
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.6667,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        1,
+        0.6667
+       ]
+      ]
+     ]
+    }
+   },
+   "grid-5": {
+    "path": "collage/grid-5.json",
+    "meta": {
+     "photos": 5,
+     "layouts": [
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.5,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.5,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        1
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        1,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.5,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        1
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.6667,
+        1
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0.25,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0.75,
+        0.3333,
+        0.25
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.6667
+       ],
+       [
+        0,
+        0.6667,
+        0.25,
+        0.3333
+       ],
+       [
+        0.25,
+        0.6667,
+        0.25,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.25,
+        0.3333
+       ],
+       [
+        0.75,
+        0.6667,
+        0.25,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.25
+       ],
+       [
+        0,
+        0.25,
+        0.3333,
+        0.25
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.25
+       ],
+       [
+        0,
+        0.75,
+        0.3333,
+        0.25
+       ],
+       [
+        0.3333,
+        0,
+        0.6667,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.25,
+        0.3333
+       ],
+       [
+        0.25,
+        0,
+        0.25,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.25,
+        0.3333
+       ],
+       [
+        0.75,
+        0,
+        0.25,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        1,
+        0.6667
+       ]
+      ]
+     ]
+    }
+   },
+   "grid-6": {
+    "path": "collage/grid-6.json",
+    "meta": {
+     "photos": 6,
+     "layouts": [
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.5,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.25,
+        0.5
+       ],
+       [
+        0.25,
+        0.5,
+        0.25,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.25,
+        0.5
+       ],
+       [
+        0.75,
+        0.5,
+        0.25,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0.25,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0.75,
+        0.5,
+        0.25
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.25,
+        0.5
+       ],
+       [
+        0.25,
+        0,
+        0.25,
+        0.5
+       ],
+       [
+        0.5,
+        0,
+        0.25,
+        0.5
+       ],
+       [
+        0.75,
+        0,
+        0.25,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.25
+       ],
+       [
+        0,
+        0.25,
+        0.5,
+        0.25
+       ],
+       [
+        0,
+        0.5,
+        0.5,
+        0.25
+       ],
+       [
+        0,
+        0.75,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.6667,
+        1
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.2
+       ],
+       [
+        0.6667,
+        0.2,
+        0.3333,
+        0.2
+       ],
+       [
+        0.6667,
+        0.4,
+        0.3333,
+        0.2
+       ],
+       [
+        0.6667,
+        0.6,
+        0.3333,
+        0.2
+       ],
+       [
+        0.6667,
+        0.8,
+        0.3333,
+        0.2
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.6667
+       ],
+       [
+        0,
+        0.6667,
+        0.2,
+        0.3333
+       ],
+       [
+        0.2,
+        0.6667,
+        0.2,
+        0.3333
+       ],
+       [
+        0.4,
+        0.6667,
+        0.2,
+        0.3333
+       ],
+       [
+        0.6,
+        0.6667,
+        0.2,
+        0.3333
+       ],
+       [
+        0.8,
+        0.6667,
+        0.2,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.2
+       ],
+       [
+        0,
+        0.2,
+        0.3333,
+        0.2
+       ],
+       [
+        0,
+        0.4,
+        0.3333,
+        0.2
+       ],
+       [
+        0,
+        0.6,
+        0.3333,
+        0.2
+       ],
+       [
+        0,
+        0.8,
+        0.3333,
+        0.2
+       ],
+       [
+        0.3333,
+        0,
+        0.6667,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.2,
+        0.3333
+       ],
+       [
+        0.2,
+        0,
+        0.2,
+        0.3333
+       ],
+       [
+        0.4,
+        0,
+        0.2,
+        0.3333
+       ],
+       [
+        0.6,
+        0,
+        0.2,
+        0.3333
+       ],
+       [
+        0.8,
+        0,
+        0.2,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        1,
+        0.6667
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.6
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.6
+       ],
+       [
+        0,
+        0.6,
+        0.25,
+        0.4
+       ],
+       [
+        0.25,
+        0.6,
+        0.25,
+        0.4
+       ],
+       [
+        0.5,
+        0.6,
+        0.25,
+        0.4
+       ],
+       [
+        0.75,
+        0.6,
+        0.25,
+        0.4
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.6,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.6,
+        0.5
+       ],
+       [
+        0.6,
+        0,
+        0.4,
+        0.25
+       ],
+       [
+        0.6,
+        0.25,
+        0.4,
+        0.25
+       ],
+       [
+        0.6,
+        0.5,
+        0.4,
+        0.25
+       ],
+       [
+        0.6,
+        0.75,
+        0.4,
+        0.25
+       ]
+      ]
+     ]
+    }
+   },
+   "grid-7": {
+    "path": "collage/grid-7.json",
+    "meta": {
+     "photos": 7,
+     "layouts": [
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.5,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.5,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.25,
+        0.5
+       ],
+       [
+        0.25,
+        0.5,
+        0.25,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.25,
+        0.5
+       ],
+       [
+        0.75,
+        0.5,
+        0.25,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0.25,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0.75,
+        0.5,
+        0.25
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.6667,
+        1
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.1667
+       ],
+       [
+        0.6667,
+        0.1667,
+        0.3333,
+        0.1667
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.1667
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.1667
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.1667
+       ],
+       [
+        0.6667,
+        0.8333,
+        0.3333,
+        0.1667
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.6667
+       ],
+       [
+        0,
+        0.6667,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.1667,
+        0.6667,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.8333,
+        0.6667,
+        0.1667,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.1667
+       ],
+       [
+        0,
+        0.1667,
+        0.3333,
+        0.1667
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.1667
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.1667
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.1667
+       ],
+       [
+        0,
+        0.8333,
+        0.3333,
+        0.1667
+       ],
+       [
+        0.3333,
+        0,
+        0.6667,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.1667,
+        0,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.1667,
+        0.3333
+       ],
+       [
+        0.8333,
+        0,
+        0.1667,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        1,
+        0.6667
+       ]
+      ]
+     ]
+    }
+   },
+   "grid-8": {
+    "path": "collage/grid-8.json",
+    "meta": {
+     "photos": 8,
+     "layouts": [
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.5,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.25,
+        0.5
+       ],
+       [
+        0.25,
+        0,
+        0.25,
+        0.5
+       ],
+       [
+        0.5,
+        0,
+        0.25,
+        0.5
+       ],
+       [
+        0.75,
+        0,
+        0.25,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.25,
+        0.5
+       ],
+       [
+        0.25,
+        0.5,
+        0.25,
+        0.5
+       ],
+       [
+        0.5,
+        0.5,
+        0.25,
+        0.5
+       ],
+       [
+        0.75,
+        0.5,
+        0.25,
+        0.5
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.25
+       ],
+       [
+        0,
+        0.25,
+        0.5,
+        0.25
+       ],
+       [
+        0,
+        0.5,
+        0.5,
+        0.25
+       ],
+       [
+        0,
+        0.75,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0.25,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0.5,
+        0.5,
+        0.25
+       ],
+       [
+        0.5,
+        0.75,
+        0.5,
+        0.25
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.6667,
+        1
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.1429
+       ],
+       [
+        0.6667,
+        0.1429,
+        0.3333,
+        0.1429
+       ],
+       [
+        0.6667,
+        0.2857,
+        0.3333,
+        0.1429
+       ],
+       [
+        0.6667,
+        0.4286,
+        0.3333,
+        0.1429
+       ],
+       [
+        0.6667,
+        0.5714,
+        0.3333,
+        0.1429
+       ],
+       [
+        0.6667,
+        0.7143,
+        0.3333,
+        0.1429
+       ],
+       [
+        0.6667,
+        0.8571,
+        0.3333,
+        0.1429
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.6667
+       ],
+       [
+        0,
+        0.6667,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.1429,
+        0.6667,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.2857,
+        0.6667,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.4286,
+        0.6667,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.5714,
+        0.6667,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.7143,
+        0.6667,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.8571,
+        0.6667,
+        0.1429,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.1429
+       ],
+       [
+        0,
+        0.1429,
+        0.3333,
+        0.1429
+       ],
+       [
+        0,
+        0.2857,
+        0.3333,
+        0.1429
+       ],
+       [
+        0,
+        0.4286,
+        0.3333,
+        0.1429
+       ],
+       [
+        0,
+        0.5714,
+        0.3333,
+        0.1429
+       ],
+       [
+        0,
+        0.7143,
+        0.3333,
+        0.1429
+       ],
+       [
+        0,
+        0.8571,
+        0.3333,
+        0.1429
+       ],
+       [
+        0.3333,
+        0,
+        0.6667,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.1429,
+        0,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.2857,
+        0,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.4286,
+        0,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.5714,
+        0,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.7143,
+        0,
+        0.1429,
+        0.3333
+       ],
+       [
+        0.8571,
+        0,
+        0.1429,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        1,
+        0.6667
+       ]
+      ]
+     ]
+    }
+   },
+   "grid-9": {
+    "path": "collage/grid-9.json",
+    "meta": {
+     "photos": 9,
+     "layouts": [
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.25,
+        0.3333
+       ],
+       [
+        0.25,
+        0.6667,
+        0.25,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.25,
+        0.3333
+       ],
+       [
+        0.75,
+        0.6667,
+        0.25,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0.25,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0.75,
+        0.3333,
+        0.25
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.25,
+        0.3333
+       ],
+       [
+        0.25,
+        0.3333,
+        0.25,
+        0.3333
+       ],
+       [
+        0.5,
+        0.3333,
+        0.25,
+        0.3333
+       ],
+       [
+        0.75,
+        0.3333,
+        0.25,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.25
+       ],
+       [
+        0.3333,
+        0.25,
+        0.3333,
+        0.25
+       ],
+       [
+        0.3333,
+        0.5,
+        0.3333,
+        0.25
+       ],
+       [
+        0.3333,
+        0.75,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0.6667,
+        0.3333,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0.5,
+        0.3333,
+        0.5,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.25,
+        0.3333
+       ],
+       [
+        0.25,
+        0.6667,
+        0.25,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.25,
+        0.3333
+       ],
+       [
+        0.75,
+        0.6667,
+        0.25,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        0.3333,
+        0.3333
+       ],
+       [
+        0,
+        0.6667,
+        0.3333,
+        0.3333
+       ],
+       [
+        0.3333,
+        0,
+        0.3333,
+        0.5
+       ],
+       [
+        0.3333,
+        0.5,
+        0.3333,
+        0.5
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0.25,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.25
+       ],
+       [
+        0.6667,
+        0.75,
+        0.3333,
+        0.25
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.6667,
+        1
+       ],
+       [
+        0.6667,
+        0,
+        0.3333,
+        0.125
+       ],
+       [
+        0.6667,
+        0.125,
+        0.3333,
+        0.125
+       ],
+       [
+        0.6667,
+        0.25,
+        0.3333,
+        0.125
+       ],
+       [
+        0.6667,
+        0.375,
+        0.3333,
+        0.125
+       ],
+       [
+        0.6667,
+        0.5,
+        0.3333,
+        0.125
+       ],
+       [
+        0.6667,
+        0.625,
+        0.3333,
+        0.125
+       ],
+       [
+        0.6667,
+        0.75,
+        0.3333,
+        0.125
+       ],
+       [
+        0.6667,
+        0.875,
+        0.3333,
+        0.125
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        1,
+        0.6667
+       ],
+       [
+        0,
+        0.6667,
+        0.125,
+        0.3333
+       ],
+       [
+        0.125,
+        0.6667,
+        0.125,
+        0.3333
+       ],
+       [
+        0.25,
+        0.6667,
+        0.125,
+        0.3333
+       ],
+       [
+        0.375,
+        0.6667,
+        0.125,
+        0.3333
+       ],
+       [
+        0.5,
+        0.6667,
+        0.125,
+        0.3333
+       ],
+       [
+        0.625,
+        0.6667,
+        0.125,
+        0.3333
+       ],
+       [
+        0.75,
+        0.6667,
+        0.125,
+        0.3333
+       ],
+       [
+        0.875,
+        0.6667,
+        0.125,
+        0.3333
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.3333,
+        0.125
+       ],
+       [
+        0,
+        0.125,
+        0.3333,
+        0.125
+       ],
+       [
+        0,
+        0.25,
+        0.3333,
+        0.125
+       ],
+       [
+        0,
+        0.375,
+        0.3333,
+        0.125
+       ],
+       [
+        0,
+        0.5,
+        0.3333,
+        0.125
+       ],
+       [
+        0,
+        0.625,
+        0.3333,
+        0.125
+       ],
+       [
+        0,
+        0.75,
+        0.3333,
+        0.125
+       ],
+       [
+        0,
+        0.875,
+        0.3333,
+        0.125
+       ],
+       [
+        0.3333,
+        0,
+        0.6667,
+        1
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.125,
+        0.3333
+       ],
+       [
+        0.125,
+        0,
+        0.125,
+        0.3333
+       ],
+       [
+        0.25,
+        0,
+        0.125,
+        0.3333
+       ],
+       [
+        0.375,
+        0,
+        0.125,
+        0.3333
+       ],
+       [
+        0.5,
+        0,
+        0.125,
+        0.3333
+       ],
+       [
+        0.625,
+        0,
+        0.125,
+        0.3333
+       ],
+       [
+        0.75,
+        0,
+        0.125,
+        0.3333
+       ],
+       [
+        0.875,
+        0,
+        0.125,
+        0.3333
+       ],
+       [
+        0,
+        0.3333,
+        1,
+        0.6667
+       ]
+      ],
+      [
+       [
+        0,
+        0,
+        0.5,
+        0.6
+       ],
+       [
+        0.5,
+        0,
+        0.5,
+        0.6
+       ],
+       [
+        0,
+        0.6,
+        0.25,
+        0.2
+       ],
+       [
+        0.25,
+        0.6,
+        0.25,
+        0.2
+       ],
+       [
+        0.5,
+        0.6,
+        0.25,
+        0.2
+       ],
+       [
+        0.75,
+        0.6,
+        0.25,
+        0.2
+       ],
+       [
+        0,
+        0.8,
+        0.3333,
+        0.2
+       ],
+       [
+        0.3333,
+        0.8,
+        0.3333,
+        0.2
+       ],
+       [
+        0.6667,
+        0.8,
+        0.3333,
+        0.2
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  "feed": {
+   "banner-filters": {
+    "path": "feed/banner-filters.svg"
+   },
+   "banner-collage": {
+    "path": "feed/banner-collage.svg"
+   },
+   "banner-ai": {
+    "path": "feed/banner-ai.svg"
+   },
+   "icon-camera": {
+    "path": "feed/icon-camera.svg"
+   },
+   "icon-edit": {
+    "path": "feed/icon-edit.svg"
+   },
+   "icon-ai": {
+    "path": "feed/icon-ai.svg"
+   },
+   "effect-sparkles": {
+    "path": "feed/effect-sparkles.svg"
+   },
+   "effect-hearts": {
+    "path": "feed/effect-hearts.svg"
+   },
+   "effect-cat": {
+    "path": "feed/effect-cat.svg"
+   },
+   "effect-shades": {
+    "path": "feed/effect-shades.svg"
+   },
+   "effect-glitter": {
+    "path": "feed/effect-glitter.svg"
+   },
+   "effect-scan": {
+    "path": "feed/effect-scan.svg"
+   },
+   "effect-freckles": {
+    "path": "feed/effect-freckles.svg"
+   },
+   "effect-sky-lens": {
+    "path": "feed/effect-sky-lens.svg"
+   },
+   "effect-amber-lens": {
+    "path": "feed/effect-amber-lens.svg"
+   },
+   "effect-starlight": {
+    "path": "feed/effect-starlight.svg"
+   },
+   "effect-glam": {
+    "path": "feed/effect-glam.svg"
+   },
+   "effect-doll-lashes": {
+    "path": "feed/effect-doll-lashes.svg"
+   },
+   "effect-big-eyes": {
+    "path": "feed/effect-big-eyes.svg"
+   },
+   "effect-dreamy": {
+    "path": "feed/effect-dreamy.svg"
+   },
+   "effect-pop": {
+    "path": "feed/effect-pop.svg"
+   },
+   "style-natural": {
+    "path": "feed/style-natural.svg"
+   },
+   "style-soft": {
+    "path": "feed/style-soft.svg"
+   },
+   "style-slim": {
+    "path": "feed/style-slim.svg"
+   },
+   "style-bright-eyes": {
+    "path": "feed/style-bright-eyes.svg"
+   },
+   "style-vline": {
+    "path": "feed/style-vline.svg"
+   },
+   "post-0": {
+    "path": "feed/post-0.svg"
+   },
+   "post-1": {
+    "path": "feed/post-1.svg"
+   },
+   "post-2": {
+    "path": "feed/post-2.svg"
+   },
+   "post-3": {
+    "path": "feed/post-3.svg"
+   },
+   "post-4": {
+    "path": "feed/post-4.svg"
+   },
+   "post-5": {
+    "path": "feed/post-5.svg"
+   },
+   "post-6": {
+    "path": "feed/post-6.svg"
+   },
+   "post-7": {
+    "path": "feed/post-7.svg"
+   },
+   "post-8": {
+    "path": "feed/post-8.svg"
+   },
+   "post-9": {
+    "path": "feed/post-9.svg"
+   },
+   "post-10": {
+    "path": "feed/post-10.svg"
+   },
+   "post-11": {
+    "path": "feed/post-11.svg"
+   },
+   "post-12": {
+    "path": "feed/post-12.svg"
+   },
+   "post-13": {
+    "path": "feed/post-13.svg"
+   },
+   "post-14": {
+    "path": "feed/post-14.svg"
+   },
+   "post-15": {
+    "path": "feed/post-15.svg"
+   },
+   "post-16": {
+    "path": "feed/post-16.svg"
+   },
+   "post-17": {
+    "path": "feed/post-17.svg"
+   },
+   "post-18": {
+    "path": "feed/post-18.svg"
+   },
+   "post-19": {
+    "path": "feed/post-19.svg"
+   },
+   "post-20": {
+    "path": "feed/post-20.svg"
+   },
+   "post-21": {
+    "path": "feed/post-21.svg"
+   },
+   "post-22": {
+    "path": "feed/post-22.svg"
+   },
+   "post-23": {
+    "path": "feed/post-23.svg"
+   },
+   "avatar-openedit": {
+    "path": "feed/avatar-openedit.svg"
+   },
+   "avatar-palette.studio": {
+    "path": "feed/avatar-palette.studio.svg"
+   },
+   "avatar-lumen.lab": {
+    "path": "feed/avatar-lumen.lab.svg"
+   },
+   "avatar-grain.and.glow": {
+    "path": "feed/avatar-grain.and.glow.svg"
+   },
+   "avatar-mono.weekend": {
+    "path": "feed/avatar-mono.weekend.svg"
+   },
+   "avatar-pastel.club": {
+    "path": "feed/avatar-pastel.club.svg"
+   },
+   "filter-original": {
+    "path": "filters/thumbs/original.png"
+   },
+   "filter-natural": {
+    "path": "filters/thumbs/natural.png"
+   },
+   "filter-clean": {
+    "path": "filters/thumbs/clean.png"
+   },
+   "filter-bright": {
+    "path": "filters/thumbs/bright.png"
+   },
+   "filter-peach": {
+    "path": "filters/thumbs/peach.png"
+   },
+   "filter-cream": {
+    "path": "filters/thumbs/cream.png"
+   },
+   "filter-mint": {
+    "path": "filters/thumbs/mint.png"
+   },
+   "filter-warm-film": {
+    "path": "filters/thumbs/warm-film.png"
+   },
+   "filter-cool-matte": {
+    "path": "filters/thumbs/cool-matte.png"
+   },
+   "filter-fade": {
+    "path": "filters/thumbs/fade.png"
+   },
+   "filter-retro": {
+    "path": "filters/thumbs/retro.png"
+   },
+   "filter-golden": {
+    "path": "filters/thumbs/golden.png"
+   },
+   "filter-polaroid": {
+    "path": "filters/thumbs/polaroid.png"
+   },
+   "filter-dusk": {
+    "path": "filters/thumbs/dusk.png"
+   },
+   "filter-cinema": {
+    "path": "filters/thumbs/cinema.png"
+   },
+   "filter-ocean": {
+    "path": "filters/thumbs/ocean.png"
+   },
+   "filter-forest": {
+    "path": "filters/thumbs/forest.png"
+   },
+   "filter-lilac": {
+    "path": "filters/thumbs/lilac.png"
+   },
+   "filter-rose": {
+    "path": "filters/thumbs/rose.png"
+   },
+   "filter-mono": {
+    "path": "filters/thumbs/mono.png"
+   },
+   "filter-noir": {
+    "path": "filters/thumbs/noir.png"
+   },
+   "filter-silver": {
+    "path": "filters/thumbs/silver.png"
+   },
+   "filter-sepia": {
+    "path": "filters/thumbs/sepia.png"
+   },
+   "sticker-sparkles": {
+    "path": "stickers/sparkles/thumb.svg"
+   },
+   "sticker-hearts": {
+    "path": "stickers/hearts/thumb.svg"
+   },
+   "sticker-cat": {
+    "path": "stickers/cat/thumb.svg"
+   },
+   "sticker-shades": {
+    "path": "stickers/shades/thumb.svg"
+   },
+   "sticker-glitter": {
+    "path": "stickers/glitter/thumb.svg"
+   },
+   "sticker-scan": {
+    "path": "stickers/scan/thumb.svg"
+   },
+   "sticker-freckles": {
+    "path": "stickers/freckles/thumb.svg"
+   },
+   "sticker-sky-lens": {
+    "path": "stickers/sky-lens/thumb.svg"
+   },
+   "sticker-amber-lens": {
+    "path": "stickers/amber-lens/thumb.svg"
+   },
+   "sticker-starlight": {
+    "path": "stickers/starlight/thumb.svg"
+   },
+   "sticker-glam": {
+    "path": "stickers/glam/thumb.svg"
+   },
+   "sticker-doll-lashes": {
+    "path": "stickers/doll-lashes/thumb.svg"
+   },
+   "sticker-big-eyes": {
+    "path": "stickers/big-eyes/thumb.svg"
+   },
+   "sticker-dreamy": {
+    "path": "stickers/dreamy/thumb.svg"
+   },
+   "sticker-pop": {
+    "path": "stickers/pop/thumb.svg"
+   },
+   "clip-1": {
+    "path": "videos/clip-1.mp4"
+   },
+   "clip-1-poster": {
+    "path": "videos/clip-1.jpg"
+   },
+   "clip-2": {
+    "path": "videos/clip-2.mp4"
+   },
+   "clip-2-poster": {
+    "path": "videos/clip-2.jpg"
+   }
+  },
+  "video": {
+   "clip-1": {
+    "path": "videos/clip-1.mp4",
+    "meta": {
+     "width": 720,
+     "height": 1280,
+     "duration": 6,
+     "poster": "clip-1-poster"
+    }
+   },
+   "clip-2": {
+    "path": "videos/clip-2.mp4",
+    "meta": {
+     "width": 720,
+     "height": 1280,
+     "duration": 6,
+     "poster": "clip-2-poster"
+    }
+   }
+  }
+ }
+}

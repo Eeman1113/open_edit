@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512">
+  <title>Open_Edit</title>
+  <rect width="64" height="64" fill="#121419"/>
+  <g transform="translate(32 32) scale(0.72) translate(-32 -32)">
+    <path d="M48.74 29.05 A17 17 0 1 1 34.95 15.26" fill="none" stroke="#FFB020" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="44.02" cy="19.98" r="4" fill="#FFB020"/>
+  </g>
+</svg>

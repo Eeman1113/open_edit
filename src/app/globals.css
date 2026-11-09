@@ -1,0 +1,81 @@
+@import "tailwindcss";
+/* Inter and Space Grotesk, both SIL Open Font License 1.1 (bundled through @fontsource). */
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource-variable/space-grotesk/wght.css";
+
+/*
+ * Design tokens are defined in src/components/ui/theme.ts and emitted as --oe-* custom properties by <ThemeStyle/>.
+ * The block below only maps them to Tailwind utilities; never hard-code a colour here.
+ */
+@theme inline {
+  --color-bg: var(--oe-bg);
+  --color-panel: var(--oe-panel);
+  --color-raised: var(--oe-raised);
+  --color-muted: var(--oe-muted);
+  --color-line: var(--oe-line);
+  --color-fg: var(--oe-fg);
+  --color-fg-2: var(--oe-fg2);
+  --color-fg-3: var(--oe-fg3);
+  --color-accent: var(--oe-accent);
+  --color-on-accent: var(--oe-on-accent);
+  --color-accent-soft: var(--oe-accent-soft);
+  --color-info: var(--oe-info);
+  --color-ok: var(--oe-ok);
+  --color-danger: var(--oe-danger);
+  --color-glass: var(--oe-glass);
+  --color-scrim: var(--oe-scrim);
+  --font-sans: var(--oe-font-sans);
+  --font-display: var(--oe-font-display);
+  --radius-xs: var(--oe-r-xs);
+  --radius-sm: var(--oe-r-sm);
+  --radius-md: var(--oe-r-md);
+  --radius-lg: var(--oe-r-lg);
+  --radius-xl: var(--oe-r-xl);
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--oe-bg);
+  color: var(--oe-fg);
+  font-family: var(--oe-font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Phone frame: full-bleed on mobile, a centred column on wide screens. */
+.app-frame {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  margin: 0 auto;
+  overflow: clip;
+  background: var(--oe-bg);
+  user-select: none;
+}
+@media (min-width: 600px) {
+  .app-frame { width: min(440px, calc(100dvh * 9 / 19.5)); box-shadow: 0 0 0 1px var(--oe-line); }
+}
+
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+:focus-visible { outline: 2px solid var(--oe-accent); outline-offset: 2px; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Shared motion */
+@keyframes oe-spin { to { transform: rotate(360deg); } }
+@keyframes oe-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes oe-fade-out { to { opacity: 0; } }
+@keyframes oe-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes oe-sheet-in { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes oe-pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes oe-pulse { 50% { opacity: .35; } }
+.spin-save, .oe-spin { animation: oe-spin 900ms linear infinite; }
+.oe-press { transition: transform var(--oe-fast) var(--oe-ease), opacity var(--oe-fast); }
+.oe-press:active { transform: scale(.94); }

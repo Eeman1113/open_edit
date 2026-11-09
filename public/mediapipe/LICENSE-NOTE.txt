@@ -1,0 +1,4 @@
+Self-hosted MediaPipe Tasks Vision runtime (Apache-2.0, https://github.com/google-ai-edge/mediapipe).
+wasm/: copied from node_modules/@mediapipe/tasks-vision@1.2.2/wasm (non-module variant only).
+models/: face_landmarker.task (float16), selfie_multiclass_256x256.tflite, pose_landmarker_lite.task from storage.googleapis.com/mediapipe-models.
+Loaded lazily by src/lib/face/tracker.ts.

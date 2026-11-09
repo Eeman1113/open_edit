@@ -1,0 +1,21 @@
+On-device AI models used by the editor (loaded lazily from this folder).
+
+migan_pipeline_v2.onnx
+  MI-GAN (Picsart AI Research), https://github.com/Picsart-AI-Research/MI-GAN
+  ONNX pipeline from https://huggingface.co/andraniksargsyan/migan. License: MIT.
+
+realesr-general-x4v3.fp32.onnx / realesr-general-x4v3.fp16.onnx
+  Real-ESRGAN realesr-general-x4v3, https://github.com/xinntao/Real-ESRGAN
+  Copyright (c) 2021, Xintao Wang. License: BSD 3-Clause.
+  Converted to ONNX with scripts/ai-convert-esrgan.py (weights unchanged; fp16 variant for WebGPU).
+
+depth-anything-v2-small.int8.onnx
+  Depth Anything V2 Small, https://github.com/DepthAnything/Depth-Anything-V2
+  ONNX export from https://huggingface.co/onnx-community/depth-anything-v2-small (onnx/model_int8.onnx).
+  License: Apache-2.0.
+
+magic_touch.tflite
+  MediaPipe Interactive Segmenter (MagicTouch), https://ai.google.dev/edge/mediapipe/solutions/vision/interactive_segmenter
+  License: Apache-2.0.
+
+Runtime: onnxruntime-web 1.31.1 (MIT, Microsoft) in public/ort/.
