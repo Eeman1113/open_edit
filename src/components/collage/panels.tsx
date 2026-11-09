@@ -1,77 +1,41 @@
 "use client";
 
-// CollageActivity menus: Layout (fragment_collage_layout), Sequence (fragment_collage_sequence),
-// Border (fragment_collage_border), Focus 2-depth (fragment_collage_focus), Colour palette 2-depth
-// (fragment_collage_color_palette).
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Img, PRIMARY, Tint } from "@/components/edit/ui";
+// Collage maker panels: Layout (canvas ratio + layout), Stack (one long strip), Border (width + colour), the photo
+// page that opens when a cell is tapped, and the colour mixer.
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button, Icon, cx } from "@/components/ui";
+import { ColorChip, EditSeekBar, FeatureButton, SwatchTool, ToolChip, ChipRow } from "@/components/edit/ui";
 import { useBackHandler } from "@/lib/back";
 import { PACKS, type Pack, type Rect, type Sel } from "./layouts";
 
-/** color/edit_item_color: selected #6ee7da, else white. */
-export const itemColor = (sel: boolean) => (sel ? "#6ee7da" : "#ffffff");
-/** color/edit_item_white_color: selected white, else white α0.3. */
-const itemWhite = (sel: boolean) => (sel ? "#ffffff" : "rgba(255,255,255,0.3)");
+/** Panel area above the tab bar, and the tab bar. */
+export const FEATURE_H = 148;
+export const MENU_H = 60;
 
-export const FEATURE_H = 138; // collage_menu_feature_height
-export const MENU_H = 52; // collage_bottom_main_menu_height
-
-/* ------------------------------------------------------------------ helpers */
-
-function useWidth<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [w, setW] = useState(390);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setW(el.clientWidth));
-    ro.observe(el);
-    setW(el.clientWidth);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, w] as const;
-}
-
-/** CenterScrollLayoutManager.smoothScrollToPosition: bring item i to the centre of the list. */
+/** Bring item i of a horizontal list to the centre. */
 function centerOn(list: HTMLElement | null, i: number) {
   const el = list?.children[i] as HTMLElement | undefined;
   if (!list || !el) return;
   list.scrollTo({ left: el.offsetLeft + el.offsetWidth / 2 - list.clientWidth / 2, behavior: "smooth" });
 }
 
-/** LayoutItemDecoration: gap by screen class (SMALL < 380dp: 5.5 items, MEDIUM < 500dp: 6.5 items, LARGE: spread or 6dp). */
-function layoutGap(parentW: number, itemW: number, count: number) {
-  const avail = parentW - 4; // minus paddingStart
-  if (parentW < 380) return (avail - itemW * 5.5) / 5;
-  if (parentW < 500) return (avail - itemW * 6.5) / 6;
-  if (count <= 1) return 0;
-  return avail > itemW * count ? (avail - itemW * count) / (count - 1) : 6;
-}
-
-const listStyle: CSSProperties = { overflowX: "auto", overflowY: "hidden", display: "flex", scrollbarWidth: "none", touchAction: "pan-x" };
-
 /* ------------------------------------------------------------------ Layout */
 
-/** Thumbnail for a bundled template: its cells drawn as outlines at the pack ratio, fitted to 40x40. */
-export function LayoutThumb({ rects, rx, ry, color }: { rects: Rect[]; rx: number; ry: number; color: string }) {
+/** Layout thumbnail: its cells as rounded tiles at the canvas ratio, fitted to a 40 px box. */
+export function LayoutThumb({ rects, rx, ry, selected }: { rects: Rect[]; rx: number; ry: number; selected: boolean }) {
   const a = rx / ry;
-  const w = a >= 1 ? 36 : 36 * a;
-  const h = a >= 1 ? 36 / a : 36;
+  const w = a >= 1 ? 38 : 38 * a;
+  const h = a >= 1 ? 38 / a : 38;
   const x0 = (40 - w) / 2, y0 = (40 - h) / 2;
-  const sw = 1.5, gap = 1.5;
+  const gap = 2;
   return (
-    <svg width={40} height={40} viewBox="0 0 40 40" aria-hidden style={{ display: "block" }}>
+    <svg width={40} height={40} viewBox="0 0 40 40" aria-hidden className="block">
       {rects.map(([x, y, rw, rh], i) => (
         <rect
           key={i}
-          x={x0 + x * w + gap / 2 + sw / 2}
-          y={y0 + y * h + gap / 2 + sw / 2}
-          width={Math.max(0, rw * w - gap - sw)}
-          height={Math.max(0, rh * h - gap - sw)}
-          rx={1.5}
-          fill="none"
-          stroke={color}
-          strokeWidth={sw}
+          x={x0 + x * w + gap / 2} y={y0 + y * h + gap / 2}
+          width={Math.max(0, rw * w - gap)} height={Math.max(0, rh * h - gap)}
+          rx={2} fill={selected ? "var(--oe-accent)" : "var(--oe-fg3)"} opacity={selected ? 1 : 0.85}
         />
       ))}
     </svg>
@@ -81,50 +45,26 @@ export function LayoutThumb({ rects, rx, ry, color }: { rects: Rect[]; rx: numbe
 export function LayoutPanel({ templates, pack, sel, onPack, onLayout }: {
   templates: Rect[][]; pack: Pack; sel: Sel; onPack: (p: Pack) => void; onLayout: (i: number) => void;
 }) {
-  const [rootRef, w] = useWidth<HTMLDivElement>();
-  const packList = useRef<HTMLDivElement>(null);
   const layoutList = useRef<HTMLDivElement>(null);
-  const packGap = layoutGap(w, 58, PACKS.length);
-  const layGap = layoutGap(w, 58, templates.length);
-  // CollageLayoutFragment.m4/k4: scroll the selected pack / layout into the centre when the lists appear
   useEffect(() => {
-    centerOn(packList.current, PACKS.findIndex((p) => p.id === pack.id));
     if (sel.kind === "layout" && sel.pack === pack.id) centerOn(layoutList.current, sel.index);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div ref={rootRef} className="absolute inset-x-0 bottom-0 bg-black" style={{ height: FEATURE_H }} onPointerDown={(e) => e.stopPropagation()}>
-      {/* list_collage_ratio */}
-      <div ref={packList} className="no-scrollbar absolute inset-x-0" style={{ ...listStyle, top: 8, height: 58, padding: "0 4px" }}>
-        {PACKS.map((p, i) => {
-          const s = p.id === pack.id;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => { onPack(p); centerOn(packList.current, i); }}
-              className="relative flex flex-none flex-col items-center"
-              style={{ width: 58, height: 58, marginLeft: i === 0 ? 0 : packGap / 2, marginRight: i === PACKS.length - 1 ? 0 : packGap / 2 }}
-            >
-              <Tint name={p.icon} size={46} color={itemColor(s)} />
-              <span className="absolute inset-x-0 bottom-0 truncate text-center" style={{ fontSize: 10, lineHeight: "12px", minHeight: 12, color: itemColor(s) }}>{p.title}</span>
-            </button>
-          );
-        })}
-      </div>
-      {/* list_collage_layout */}
-      <div ref={layoutList} className="no-scrollbar absolute inset-x-0" style={{ ...listStyle, top: 8 + 58 + 14, height: 48, padding: "0 4px" }}>
+    <div className="flex h-full flex-col justify-center gap-3" onPointerDown={(e) => e.stopPropagation()}>
+      <ChipRow>
+        {PACKS.map((p) => <ToolChip key={p.id} label={p.title} selected={p.id === pack.id} onClick={() => onPack(p)} />)}
+      </ChipRow>
+      <div ref={layoutList} className="no-scrollbar flex gap-2 overflow-x-auto px-4 py-1">
         {templates.map((t, i) => {
           const s = sel.kind === "layout" && sel.pack === pack.id && sel.index === i;
           return (
             <button
-              key={i}
-              type="button"
+              key={i} type="button" aria-label={`Layout ${i + 1}`} aria-pressed={s}
               onClick={() => { onLayout(i); centerOn(layoutList.current, i); }}
-              className="flex flex-none items-center justify-center"
-              style={{ width: 58, height: 48, marginLeft: i === 0 ? 0 : layGap / 2, marginRight: i === templates.length - 1 ? 0 : layGap / 2 }}
+              className={cx("oe-press flex h-[60px] w-[60px] flex-none items-center justify-center rounded-md transition-colors", s ? "bg-accent-soft ring-2 ring-accent" : "bg-raised")}
             >
-              <LayoutThumb rects={t} rx={pack.rx} ry={pack.ry} color={itemWhite(s)} />
+              <LayoutThumb rects={t} rx={pack.rx} ry={pack.ry} selected={s} />
             </button>
           );
         })}
@@ -133,84 +73,28 @@ export function LayoutPanel({ templates, pack, sel, onPack, onLayout }: {
   );
 }
 
-/* ------------------------------------------------------------------ 58x58 icon button (EditImageButton-like) */
+/* ------------------------------------------------------------------ Stack */
 
-function IconButton({ icon, label, selected = false, onClick }: { icon: string; label: string; selected?: boolean; onClick: () => void }) {
+function StackOption({ icon, title, sub, selected, onClick }: { icon: "stack-v" | "stack-h"; title: string; sub: string; selected: boolean; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="relative flex flex-none flex-col items-center" style={{ width: 58, height: 58 }}>
-      <Tint name={icon} size={46} color={itemColor(selected)} />
-      <span className="w-full truncate text-center" style={{ fontSize: 10, lineHeight: "12px", color: itemColor(selected) }}>{label}</span>
+    <button
+      type="button" onClick={onClick} aria-pressed={selected}
+      className={cx("oe-press flex flex-1 items-center gap-3 rounded-lg p-3 text-left transition-colors", selected ? "bg-accent-soft ring-2 ring-accent" : "bg-raised")}
+    >
+      <span className={cx("flex h-10 w-10 flex-none items-center justify-center rounded-md", selected ? "bg-accent text-on-accent" : "bg-muted text-fg")}><Icon name={icon} size={20} /></span>
+      <span className="min-w-0">
+        <span className="block text-[14px] font-semibold">{title}</span>
+        <span className="block text-[12px] text-fg-3">{sub}</span>
+      </span>
     </button>
   );
 }
 
-/** Weighted horizontal chain (spaces with layout_constraintHorizontal_weight around fixed 58dp buttons). */
-function Chain({ weights, children }: { weights: number[]; children: ReactNode[] }) {
-  const out: ReactNode[] = [];
-  weights.forEach((wt, i) => {
-    out.push(<div key={`s${i}`} style={{ flex: `${wt} 1 0`, minWidth: 0 }} />);
-    if (children[i]) out.push(<div key={`b${i}`} className="flex-none">{children[i]}</div>);
-  });
-  return <div className="absolute inset-0 flex items-center">{out}</div>;
-}
-
-/* ------------------------------------------------------------------ Sequence */
-
 export function SequencePanel({ sel, onHeight, onWidth }: { sel: Sel; onHeight: () => void; onWidth: () => void }) {
   return (
-    <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: FEATURE_H }} onPointerDown={(e) => e.stopPropagation()}>
-      <Chain weights={[3996, 2008, 3996]}>
-        {[
-          <IconButton key="h" icon="icon_edit_layout_sequence_height" label="Height" selected={sel.kind === "height"} onClick={onHeight} />,
-          <IconButton key="w" icon="icon_edit_layout_sequence_width" label="Width" selected={sel.kind === "width"} onClick={onWidth} />,
-        ]}
-      </Chain>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ EditSeekBar (border size: max 1, no default mark) */
-
-export function SizeSeekBar({ value, disabled, onChange, flashKey }: { value: number; disabled: boolean; onChange: (v: number) => void; flashKey: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [drag, setDrag] = useState(false);
-  const [bubble, setBubble] = useState(false);
-  const hideT = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    // EditSeekBar.G(): flash the level text when the layout changes
-    const t1 = window.setTimeout(() => { setBubble(true); hideT.current = window.setTimeout(() => setBubble(false), 500); }, 0);
-    return () => { window.clearTimeout(t1); window.clearTimeout(hideT.current); };
-  }, [flashKey]);
-  const valueAt = (clientX: number) => {
-    const r = ref.current!.getBoundingClientRect();
-    const inset = 11.5;
-    return Math.min(1, Math.max(0, (clientX - r.left - inset) / Math.max(1, r.width - inset * 2)));
-  };
-  return (
-    <div
-      ref={ref}
-      className="relative"
-      style={{ height: 23, padding: "10px 0", boxSizing: "content-box", touchAction: "none", opacity: disabled ? 77 / 255 : 1, pointerEvents: disabled ? "none" : undefined }}
-      onPointerDown={(e) => {
-        if (disabled) return;
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-        setDrag(true); setBubble(true); window.clearTimeout(hideT.current);
-        onChange(valueAt(e.clientX));
-      }}
-      onPointerMove={(e) => { if (drag) onChange(valueAt(e.clientX)); }}
-      onPointerUp={() => { setDrag(false); window.clearTimeout(hideT.current); hideT.current = window.setTimeout(() => setBubble(false), 500); }}
-      onPointerCancel={() => { setDrag(false); setBubble(false); }}
-    >
-      <div className="absolute" style={{ left: 11.5, right: 11.5, top: "50%", height: 2, marginTop: -1, boxShadow: "0 0 2px rgba(0,0,0,0.3)", background: "rgba(255,255,255,0.4)" }}>
-        <div className="absolute inset-y-0 left-0 bg-white" style={{ width: `${value * 100}%` }} />
-        <div className="absolute rounded-full bg-white" style={{ width: 19, height: 19, top: -8.5, left: `calc(${value * 100}% - 9.5px)`, boxShadow: "0 0 2px rgba(0,0,0,0.3)" }} />
-        <div
-          className="pointer-events-none absolute flex items-center justify-center rounded-full bg-white font-bold"
-          style={{ width: 42, height: 42, left: `calc(${value * 100}% - 21px)`, bottom: 20.5, fontSize: 13, color: "#222222", boxShadow: "0 0 2px rgba(0,0,0,0.3)", opacity: bubble ? 1 : 0, transition: bubble ? "none" : "opacity 300ms" }}
-        >
-          {Math.round(value * 100)}
-        </div>
-      </div>
+    <div className="flex h-full items-center gap-3 px-4" onPointerDown={(e) => e.stopPropagation()}>
+      <StackOption icon="stack-v" title="Top to bottom" sub="One tall strip" selected={sel.kind === "height"} onClick={onHeight} />
+      <StackOption icon="stack-h" title="Side by side" sub="One wide strip" selected={sel.kind === "width"} onClick={onWidth} />
     </div>
   );
 }
@@ -223,21 +107,6 @@ export type BorderItem =
 
 export const sameColor = (a: BorderItem, b: { type: string; color: string }) => a.kind === "color" && a.type === b.type && a.color.toLowerCase() === b.color.toLowerCase();
 
-function ColorItem({ color, selected, onClick }: { color: string; selected: boolean; onClick: () => void }) {
-  const black = color.toLowerCase() === "#000000";
-  return (
-    <button type="button" onClick={onClick} className="relative flex-none rounded-full" style={{ width: 32, height: 32 }}>
-      {/* icon_color: edit_layout_circle tinted (black: edit_layout_black_circle selector) */}
-      <span
-        className="absolute inset-0 rounded-full"
-        style={{ background: color, boxShadow: black ? `inset 0 0 0 ${selected ? 2 : 1}px ${selected ? "#ffffff" : "#6f6f6f"}` : undefined }}
-      />
-      {/* icon_selected: edit_layout_border_color_selected (inset 2dp, 2.5dp black ring) */}
-      {selected && <span className="absolute rounded-full" style={{ inset: 2, border: "2.5px solid #000000" }} />}
-    </button>
-  );
-}
-
 export function BorderPanel({ items, current, size, sizeEnabled, flashKey, onSize, onItem, dimmed }: {
   items: BorderItem[]; current: { type: string; color: string }; size: number; sizeEnabled: boolean; flashKey: number;
   onSize: (v: number) => void; onItem: (it: BorderItem, i: number) => void; dimmed: boolean;
@@ -249,68 +118,58 @@ export function BorderPanel({ items, current, size, sizeEnabled, flashKey, onSiz
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: FEATURE_H }} onPointerDown={(e) => e.stopPropagation()}>
-      {/* container_border_width: "Size" + EditSeekBar */}
-      <div className="absolute inset-x-0 top-0 flex items-center" style={{ height: 60 }}>
-        <span className="flex-none text-white" style={{ marginLeft: 30, maxWidth: 80, fontSize: 13, lineHeight: "16px" }}>Size</span>
-        <div className="min-w-0 flex-1" style={{ marginLeft: 25, marginRight: 40 }}>
-          <SizeSeekBar value={size} disabled={!sizeEnabled} onChange={onSize} flashKey={flashKey} />
-        </div>
+    <div className="relative flex h-full flex-col justify-center gap-3" onPointerDown={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-3 px-4">
+        <span className="w-14 flex-none text-[13px] font-medium text-fg-2">Width</span>
+        <EditSeekBar value={size} min={0} max={1} def={0} duplex={false} disabled={!sizeEnabled} flashKey={flashKey} onChange={onSize} />
+        <span className="tabular w-8 flex-none text-right text-[12px] text-fg-3">{Math.round(size * 100)}</span>
       </div>
-      {/* list_border_color: paddingH 20, 32dp items, LinearItemDecoration(17dp) */}
-      <div ref={list} className="no-scrollbar absolute inset-x-0" style={{ ...listStyle, top: 60 + (FEATURE_H - 60 - 10 - 32) / 2, height: 32, padding: "0 20px", gap: 17 }}>
+      <div ref={list} className="no-scrollbar flex items-center gap-3 overflow-x-auto px-4 py-1.5">
         {items.map((it, i) =>
           it.kind === "tool" ? (
-            <button
-              key={`t-${it.tool}`}
-              type="button"
-              onClick={() => { centerOn(list.current, i); onItem(it, i); }}
-              className="flex flex-none items-center justify-center rounded-full"
-              style={{ width: 32, height: 32, background: it.tool === "picker" ? "#333333" : "transparent" }}
-            >
-              <Img name={it.tool === "picker" ? "icon_edit_color_picker" : "icon_edit_color_wheel"} size={32} />
-            </button>
+            <SwatchTool key={`t-${it.tool}`} icon={it.tool === "picker" ? "pipette" : "palette"} label={it.tool === "picker" ? "Pick from the collage" : "Mix a colour"} active={it.tool === "picker" && dimmed} onClick={() => { centerOn(list.current, i); onItem(it, i); }} />
           ) : (
-            <ColorItem key={`${it.type}-${it.color}`} color={it.color} selected={sameColor(it, current)} onClick={() => { centerOn(list.current, i); onItem(it, i); }} />
+            <ColorChip key={`${it.type}-${it.color}`} color={it.color} selected={sameColor(it, current)} onClick={() => { centerOn(list.current, i); onItem(it, i); }} />
           ),
         )}
       </div>
-      {/* dimmed_view (common_black_80) while the colour picker is active */}
-      {dimmed && <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.8)", animation: "collage-fade 200ms" }} onClick={(e) => e.stopPropagation()} />}
+      {dimmed && <div className="absolute inset-0 flex items-center justify-center bg-panel/85 text-[13px] font-medium text-fg-2" style={{ animation: "oe-fade-in 200ms" }} onClick={(e) => e.stopPropagation()}>Drag on the collage to pick a colour</div>}
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ Focus (2-depth) */
+/* ------------------------------------------------------------------ Photo page (a cell was tapped) */
 
-export function FocusPanel({ onReplace, onRight90, onMirror, onFlip, onCancel, onConfirm }: {
-  onReplace: () => void; onRight90: () => void; onMirror: () => void; onFlip: () => void; onCancel: () => void; onConfirm: () => void;
+/** Top command bar of a collage page (Cancel · title · Apply). */
+export function PageBar({ title, onCancel, onConfirm, children }: { title?: string; onCancel?: () => void; onConfirm: () => void; children?: ReactNode }) {
+  return (
+    <div className="absolute inset-x-0 top-0 z-30 flex items-center gap-2 bg-bg/95 px-2 backdrop-blur-md" style={{ height: "var(--oe-top-bar)" }}>
+      {onCancel ? (
+        <button type="button" aria-label="Cancel" onClick={onCancel} className="oe-press flex h-10 w-10 items-center justify-center rounded-full bg-raised"><Icon name="close" size={20} /></button>
+      ) : <span className="w-10" />}
+      <div className="flex min-w-0 flex-1 justify-center font-display text-[16px] font-semibold">{children ?? title}</div>
+      <button type="button" aria-label="Apply" onClick={onConfirm} className="oe-press flex h-10 w-10 items-center justify-center rounded-full bg-accent text-on-accent"><Icon name="check" size={20} stroke={2.4} /></button>
+    </div>
+  );
+}
+
+export function FocusPanel({ onReplace, onRight90, onMirror, onFlip }: {
+  onReplace: () => void; onRight90: () => void; onMirror: () => void; onFlip: () => void;
 }) {
   return (
-    <div className="absolute inset-x-0 bottom-0" onPointerDown={(e) => e.stopPropagation()}>
-      <div className="relative bg-black" style={{ height: FEATURE_H }}>
-        <Chain weights={[2692, 1538, 1538, 1538, 2692]}>
-          {[
-            <IconButton key="r" icon="icon_edit_layout_replace" label="Replace" onClick={onReplace} />,
-            <IconButton key="90" icon="icon_edit_layout_right90" label="Right 90°" onClick={onRight90} />,
-            <IconButton key="m" icon="icon_edit_layout_mirror" label="Mirror" onClick={onMirror} />,
-            <IconButton key="f" icon="icon_edit_layout_flip" label="Flip" onClick={onFlip} />,
-          ]}
-        </Chain>
+    <div className="flex h-full flex-col justify-center gap-2" onPointerDown={(e) => e.stopPropagation()}>
+      <div className="flex justify-center gap-2">
+        <FeatureButton icon="replace" label="Replace" onClick={onReplace} />
+        <FeatureButton icon="rotate-right" label="Rotate" onClick={onRight90} />
+        <FeatureButton icon="flip-h" label="Flip across" onClick={onMirror} />
+        <FeatureButton icon="flip-v" label="Flip upright" onClick={onFlip} />
       </div>
-      <div className="relative bg-black" style={{ height: MENU_H }}>
-        <button type="button" onClick={onCancel} aria-label="Cancel" className="absolute bottom-0 left-0" style={{ width: 52, height: 52 }}>
-          <Img name="icon_edit_title_close" size={52} />
-        </button>
-        <button type="button" onClick={onConfirm} aria-label="Confirm" className="absolute bottom-0 right-0" style={{ width: 52, height: 52 }}>
-          <Tint name="icon_edit_title_confirm" size={52} color={PRIMARY} />
-        </button>
-      </div>
+      <p className="text-center text-[12px] text-fg-3">Drag or pinch the photo to frame it. Hold and drag to swap cells.</p>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ Colour palette (2-depth) */
+/* ------------------------------------------------------------------ Colour mixer */
 
 export function hsvToHex(h: number, s: number, v: number) {
   const f = (n: number) => {
@@ -330,7 +189,7 @@ export function hexToHsv(hex: string): [number, number, number] {
   return [h, mx ? d / mx : 0, mx];
 }
 
-/** nx4.b: "#abc" style partial input → full colour (missing digits padded with 0, short forms doubled). */
+/** Partial hex input → full colour ("#abc" → "#AABBCC", missing digits padded with 0). */
 function parseHex(text: string): string | null {
   const s = text.replace(/#/g, "");
   let full: string;
@@ -346,11 +205,13 @@ function parseHex(text: string): string | null {
   return /^[0-9a-f]{6}$/i.test(full) ? `#${full.toUpperCase()}` : null;
 }
 
+export const PALETTE_H = 300;
+
 export function PalettePanel({ initial, onLive, onApply, onCommit, onBack }: { initial: string | null; onLive: (hex: string) => void; onApply: (hex: string) => void; onCommit: (hex: string) => void; onBack: () => void }) {
-  // ColorSaturationValueView: unselected → pointer at the top-left = HSV(hue, 0, 1)
+  // no colour yet: start at white (top-left of the square)
   const [hsv, setHsv] = useState<[number, number, number]>(() => (initial ? hexToHsv(initial) : [0, 0, 1]));
   const hex = hsvToHex(hsv[0], hsv[1], hsv[2]);
-  const [text, setText] = useState<string | null>(null); // null = not focused (shows the hex)
+  const [text, setText] = useState<string | null>(null); // null = not editing (shows the hex)
   const sv = useRef<HTMLDivElement>(null);
   const hue = useRef<HTMLDivElement>(null);
   const live = useRef(onLive);
@@ -366,44 +227,39 @@ export function PalettePanel({ initial, onLive, onApply, onCommit, onBack }: { i
   };
   const hueAt = (e: React.PointerEvent) => {
     const r = hue.current!.getBoundingClientRect();
-    const x = Math.min(r.width - 16, Math.max(16, e.clientX - r.left));
-    setHsv(([, s, v]) => [((x - 16) / Math.max(1, r.width - 32)) * 360, s, v]);
+    const x = Math.min(r.width, Math.max(0, e.clientX - r.left));
+    setHsv(([, s, v]) => [(x / Math.max(1, r.width)) * 359.9, s, v]);
   };
-  const hueX = `calc(16px + (100% - 32px) * ${hsv[0] / 360})`;
   const pureHue = hsvToHex(hsv[0], 1, 1);
   return (
     <div className="absolute inset-0" onPointerDown={(e) => e.stopPropagation()}>
-      {/* preview_area: touching the preview commits the colour (CollageDataViewModel.lg) */}
-      <div className="absolute inset-x-0 top-0" style={{ bottom: 294 }} onPointerDown={() => onApply(hex)} />
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ paddingTop: 16 }}>
-        {/* view_color_saturation */}
+      <PageBar title="Border colour" onCancel={onBack} onConfirm={() => onCommit(hex)} />
+      {/* tapping the collage applies the colour so far */}
+      <div className="absolute inset-x-0" style={{ top: 52, bottom: PALETTE_H }} onPointerDown={() => onApply(hex)} />
+      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-4 rounded-t-xl bg-panel px-4 pb-5 pt-4 shadow-[0_-8px_24px_rgba(0,0,0,0.35)]" style={{ height: PALETTE_H }}>
         <div
           ref={sv}
-          className="relative"
-          style={{ height: 124, margin: "0 16px 10px", borderRadius: 4, touchAction: "none", background: `linear-gradient(to bottom, rgba(0,0,0,0), #000000), linear-gradient(to right, #ffffff, ${pureHue})`, boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.118)" }}
+          className="relative h-[130px] flex-none touch-none rounded-md"
+          style={{ background: `linear-gradient(to bottom, rgba(0,0,0,0), #000000), linear-gradient(to right, #ffffff, ${pureHue})` }}
           onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); svAt(e); }}
           onPointerMove={(e) => { if (e.buttons) svAt(e); }}
         >
-          <span
-            className="pointer-events-none absolute rounded-full"
-            style={{ width: 34, height: 34, left: `calc(${hsv[1] * 100}% - 17px)`, top: `calc(${(1 - hsv[2]) * 100}% - 17px)`, border: "2px solid #ffffff", boxShadow: "0 0 6px rgba(0,0,0,0.2)" }}
-          />
+          <span className="pointer-events-none absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full ring-[3px] ring-white" style={{ left: `${hsv[1] * 100}%`, top: `${(1 - hsv[2]) * 100}%`, background: hex, boxShadow: "0 0 0 4px rgba(0,0,0,0.25)" }} />
         </div>
-        {/* view_color_hue_slider */}
         <div
           ref={hue}
-          className="relative"
-          style={{ height: 36, touchAction: "none" }}
+          className="relative h-6 flex-none touch-none rounded-full"
+          style={{ background: "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)" }}
           onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); hueAt(e); }}
           onPointerMove={(e) => { if (e.buttons) hueAt(e); }}
         >
-          <div className="absolute" style={{ left: 16, right: 16, top: 17, height: 2, background: "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)" }} />
-          <span className="pointer-events-none absolute rounded-full" style={{ width: 18, height: 18, top: 9, left: `calc(${hueX} - 9px)`, background: pureHue, border: "2px solid #ffffff" }} />
+          <span className="pointer-events-none absolute top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full ring-[3px] ring-white" style={{ left: `${(hsv[0] / 360) * 100}%`, background: pureHue }} />
         </div>
-        {/* container_color_input */}
-        <div className="relative flex items-center" style={{ height: 56, padding: "0 16px" }}>
+        <div className="flex items-center gap-3">
+          <span className="h-10 w-10 flex-none rounded-md ring-1 ring-line" style={{ background: hex }} />
           <input
             value={text ?? hex}
+            aria-label="Hex colour"
             onFocus={() => setText("")}
             onBlur={() => setText(null)}
             onChange={(e) => {
@@ -416,20 +272,12 @@ export function PalettePanel({ initial, onLive, onApply, onCommit, onBack }: { i
             }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onCommit(hex); } }}
             maxLength={7}
-            inputMode="text"
-            enterKeyHint="search"
             spellCheck={false}
             autoComplete="off"
-            className="w-full text-center text-white outline-none"
-            style={{ height: 36, borderRadius: 4, background: "#222222", fontSize: 14, caretColor: PRIMARY }}
+            placeholder="#RRGGBB"
+            className="tabular h-10 min-w-0 flex-1 rounded-md bg-raised px-3 font-display text-[15px] font-semibold text-fg outline-none placeholder:text-fg-3 focus:ring-2 focus:ring-accent"
           />
-        </div>
-        {/* container_main_menu */}
-        <div className="relative flex items-center justify-center" style={{ height: MENU_H }}>
-          <span className="text-white" style={{ fontSize: 15 }}>Color</span>
-          <button type="button" onClick={() => onCommit(hex)} aria-label="Confirm" className="absolute bottom-0 right-0" style={{ width: 52, height: 52 }}>
-            <Tint name="icon_edit_title_confirm" size={52} color={PRIMARY} />
-          </button>
+          <Button size="sm" className="h-10" onClick={() => onCommit(hex)}>Use</Button>
         </div>
       </div>
     </div>

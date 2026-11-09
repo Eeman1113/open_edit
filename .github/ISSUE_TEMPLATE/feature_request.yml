@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest an idea for Open_Edit
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: Describe the problem or the workflow, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Project rules
+      options:
+        - label: The idea works without accounts or paywalls and keeps photos on the device.
+          required: true
+        - label: Any assets or models it needs are original or permissively licensed.
+          required: true

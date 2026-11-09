@@ -1,8 +1,7 @@
 // Hardware back (Escape) through the shared helper (src/lib/back.ts): one press closes exactly the top-most thing —
 // photo editor sub/tool pages, AR filter page, stamp shop, leave dialog, share bar; video editor 2-depth pages, music
 // list, leave dialog; collage leave dialog; Discover profile More sheet / report sheet / block dialog; camera panels.
-import { SCRATCH } from "../lib.mjs";
-import { importToGallery, nthThumb, editorMain, previewThumb, diff, openCamera, hasImg } from "../h.mjs";
+import { TEST_PHOTO, TEST_VIDEO, importToGallery, nthThumb, editorMain, previewThumb, diff, openCamera, hasImg } from "../h.mjs";
 
 const at = (p) => `location.pathname === ${JSON.stringify(p)}`;
 const esc = async (s, settle = 700) => { await s.key("Escape"); await s.sleep(settle); };
@@ -30,7 +29,7 @@ export default async function flowBackKey(s) {
   /* ------------------------------------------------------------------ photo editor */
   await s.step("editor-open", async () => {
     await s.goto("/gallery", { settle: 1500 });
-    await importToGallery(s, [SCRATCH + "/user.jpg"]);
+    await importToGallery(s, [TEST_PHOTO]);
     await s.tapAt(...(await s.ev(nthThumb(0)))); await s.sleep(3000);
     await s.waitFor(at("/edit"), { timeout: 8000 });
     await s.waitFor(editorMain, { timeout: 15000, msg: "editor tabs" });
@@ -110,7 +109,7 @@ export default async function flowBackKey(s) {
   await s.step("video-open", async () => {
     // 3 s clip made from the user's photo in the scratchpad (never copied into the repo), imported via the gallery
     if ((await s.ev("location.pathname")) !== "/gallery") await s.goto("/gallery", { settle: 1500 });
-    await s.setFile("input[type=file]", [SCRATCH + "/e2e/user-face.mp4"]);
+    await s.setFile("input[type=file]", [TEST_VIDEO]);
     await s.sleep(2500);
     await s.click("Videos", { settle: 1200 });
     const cell = await s.locate("00:03", { exact: false });

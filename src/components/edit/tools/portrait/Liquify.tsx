@@ -1,12 +1,12 @@
 "use client";
 
-// EPRetouchFragment ("Reshape", manual liquify): Reshape / Restore modes, Size + Strength rows (98dp option area),
-// per-stroke undo/redo. The warp is the face engine's LiquifyField (Kuru KuruTouchUniV2 push / restore brush),
-// stored in doc.beauty.face.liq and rendered through the editor pipeline (full resolution on SAVE).
+// Liquify: push pixels around with your finger, or paint them back with Restore. Size and Strength sliders, one undo
+// step per stroke. The warp is the face engine's LiquifyField, stored in doc.beauty.face.liq and rendered through the
+// editor pipeline (full resolution on Save).
 import { useEffect, useRef, useState } from "react";
 import { LiquifyField } from "@/lib/face";
 import { useEdit } from "../../ctx";
-import { ControlRow, EditSeekBar, FeatureButton } from "../../ui";
+import { ControlRow, EditSeekBar, FeatureButton, SliderRow } from "../../ui";
 import { BrushRing, MENU, Panel, TextTooltip, useHold, usePhotoArea, useTimedTooltip } from "../common";
 import { dropLiquify, liquifyById, storeLiquify } from "./faceEngine";
 import { useBase, useFaceDraft } from "./faceUi";
@@ -22,8 +22,8 @@ export function LiquifyPage() {
   const [size, setSize] = useState(0.1);
   const [strength, setStrength] = useState(0.2);
   const [ring, setRing] = useState<{ x: number; y: number } | null>(null);
-  const [tip] = useTimedTooltip("Tap and drag your finger to edit wherever you want!", 2500);
-  const rPx = 22 + (140 - 22) * size; // brush radius, dp (touchBeautyBrushSize)
+  const [tip] = useTimedTooltip("Drag on the photo to push it into shape", 2500);
+  const rPx = 22 + (140 - 22) * size; // brush radius in CSS px
 
   // working field + per-stroke history (snapshots); index 0 = state on open
   const field = useRef<LiquifyField | null>(null);
@@ -107,22 +107,18 @@ export function LiquifyPage() {
   return (
     <>
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[5] overflow-hidden" style={{ bottom: MENU }}><BrushRing at={ring} r={rPx} /></div>
-      <TextTooltip text={tip} bottom={MENU + 98 + 54} />
-      <ControlRow bottom={MENU + (mode ? 98 : 0)} style={{ zIndex: 20 }} undo={{ can: hist.i > 0, on: () => step(hist.i - 1) }} redo={{ can: hist.i < hist.ids.length - 1, on: () => step(hist.i + 1) }} onOriginal={hold} originalEnabled={!!hist.ids[hist.i]} />
+      <TextTooltip text={tip} bottom={MENU + 104 + 56} />
+      <ControlRow bottom={MENU + (mode ? 104 : 0)} style={{ zIndex: 20 }} undo={{ can: hist.i > 0, on: () => step(hist.i - 1) }} redo={{ can: hist.i < hist.ids.length - 1, on: () => step(hist.i + 1) }} onOriginal={hold} originalEnabled={!!hist.ids[hist.i]} />
       {mode && (
-        <div className="absolute inset-x-0 z-20" style={{ bottom: MENU, height: 98, background: "rgba(0,0,0,0.4)" }} onPointerDown={(e) => e.stopPropagation()}>
-          {([["Size", size, setSize, 0.01, 0.1], ["Strength", strength, setStrength, 0, 0.2]] as const).map(([l, v, set, min, def], i) => (
-            <div key={l} className="absolute inset-x-0 flex items-center" style={{ top: i * 44 + (i ? 0 : 5), height: 49 }}>
-              <span className="flex-none truncate text-white" style={{ marginLeft: 20, maxWidth: 80, width: 56, fontSize: 13 }}>{l}</span>
-              <EditSeekBar style={{ marginLeft: 24, marginRight: 52 }} value={v} min={min} max={1} def={def} onChange={set} />
-            </div>
-          ))}
+        <div className="absolute inset-x-3 z-20 flex flex-col justify-center gap-1 rounded-lg bg-panel/90 py-2 shadow-lg ring-1 ring-line backdrop-blur-md" style={{ bottom: MENU + 8, height: 96 }} onPointerDown={(e) => e.stopPropagation()}>
+          <SliderRow label="Size" className="px-3"><EditSeekBar value={size} min={0.01} max={1} def={0.1} onChange={setSize} /></SliderRow>
+          <SliderRow label="Strength" className="px-3"><EditSeekBar value={strength} min={0} max={1} def={0.2} onChange={setStrength} /></SliderRow>
         </div>
       )}
-      <Panel title="Reshape" onClose={close} onConfirm={finish}>
-        <div className="absolute inset-x-0 flex justify-center" style={{ top: 36, gap: 52 }}>
-          <FeatureButton icon="icon_edit_beauty_reshape" label="Reshape" selected={mode === "reshape"} onClick={() => setMode((m) => (m === "reshape" ? null : "reshape"))} />
-          <FeatureButton icon="icon_edit_beauty_restore" label="Restore" selected={mode === "restore"} onClick={() => setMode((m) => (m === "restore" ? null : "restore"))} />
+      <Panel title="Liquify" onClose={close} onConfirm={finish}>
+        <div className="flex h-full items-center justify-center gap-3">
+          <FeatureButton icon="hand" label="Push" selected={mode === "reshape"} onClick={() => setMode((m) => (m === "reshape" ? null : "reshape"))} />
+          <FeatureButton icon="reset" label="Restore" selected={mode === "restore"} onClick={() => setMode((m) => (m === "restore" ? null : "restore"))} />
         </div>
       </Panel>
     </>

@@ -2,11 +2,10 @@
 //  - photo editor AR filter tab: full grid, server category keeps the network-error page, a pick renders on the photo
 //    (face engine, IMAGE mode) and is in the full-resolution SAVE;
 //  - video editor AR filter tab: full list, server category error, a pick renders per frame and is in the export.
-import { SCRATCH } from "../lib.mjs";
-import { importToGallery, nthThumb, editorMain } from "../h.mjs";
+import { TEST_PHOTO, TEST_VIDEO, importToGallery, nthThumb, editorMain } from "../h.mjs";
 
-const STARTER = 36; // 20 lenses + 6 catch-lights + 6 moles + Glam + Doll lashes + Smart scan + basic beauty
-const SMART_SCAN = 9000600, GLAM = 9000400;
+const STARTER = 15; // built-in effects of the open pack (public/packs/open/manifest.json, kind "sticker")
+const SMART_SCAN = 106 /* Mesh scan */, GLAM = 111;
 
 /** 64×64 grey thumbnail of an element (canvas / img / video), stored on window[key] (area-filtered via 256², so
  *  sources of different resolutions compare without aliasing). */
@@ -41,7 +40,7 @@ export default async function flowArFilter(s) {
   /* ------------------------------------------------------------------ photo editor */
   await s.step("photo-open-editor", async () => {
     await s.goto("/gallery", { settle: 1500 });
-    await importToGallery(s, [SCRATCH + "/user.jpg"]);
+    await importToGallery(s, [TEST_PHOTO]);
     await s.tapAt(...(await s.ev(nthThumb(0)))); await s.sleep(3000);
     await s.waitFor(`location.pathname === '/edit'`, { timeout: 8000 });
     await s.waitFor(editorMain, { timeout: 15000, msg: "editor tabs" });
@@ -111,7 +110,7 @@ export default async function flowArFilter(s) {
     // a 3 s clip of the user's photo (scratchpad/e2e/user-face.mp4, made by ffmpeg; never copied into the repo),
     // imported through the gallery's own file input and opened from the Videos tab
     await s.goto("/gallery", { settle: 1500 });
-    await s.setFile("input[type=file]", [SCRATCH + "/e2e/user-face.mp4"]);
+    await s.setFile("input[type=file]", [TEST_VIDEO]);
     await s.sleep(2500);
     await s.click("Videos", { settle: 1500 });
     const at = await s.locate("00:03", { exact: false });

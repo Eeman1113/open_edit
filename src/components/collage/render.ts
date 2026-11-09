@@ -1,5 +1,6 @@
-// Collage geometry + 2D rendering (stands in for the Kuru "collage" engine driven by CollageController).
+// Collage geometry and 2D rendering.
 // The same draw() renders the on-screen preview and the full-resolution JPEG that is saved.
+import { TOKENS } from "@/components/ui/theme";
 import { PACKS, templatesFor, type Rect, type Sel } from "./layouts";
 
 export interface Pic { img: CanvasImageSource; w: number; h: number }
@@ -117,7 +118,7 @@ export function draw(ctx: CanvasRenderingContext2D, sc: Scene, W: number, H: num
   if (opts?.selected != null && cells[opts.selected]) {
     const [x, y, w, h] = cells[opts.selected];
     const lw = opts.lineWidth ?? 2;
-    ctx.strokeStyle = opts.highlight ?? "#0bd4d2";
+    ctx.strokeStyle = opts.highlight ?? TOKENS.color.accent;
     ctx.lineWidth = lw;
     ctx.strokeRect(x + lw / 2, y + lw / 2, w - lw, h - lw);
   }

@@ -31,7 +31,7 @@ import {
   type Ratio, type Rect,
 } from "./layout";
 import { loadPref, savePref } from "./prefs";
-import { getSetting, useSetting } from "@/lib/settings";
+import { SETTINGS, getSetting, useSetting } from "@/lib/settings";
 
 type Panel = "none" | "filter" | "beauty" | "sticker";
 type Mode = "NORMAL" | "VIDEO";
@@ -139,7 +139,7 @@ export function CameraScreen() {
   const [requested, setRequested] = useState(false);
   const streamOn = perm === "granted" || requested;
   const front = facing === "user";
-  const [gridLines] = useSetting("gridPreviewMode", false);
+  const [gridLines] = useSetting(SETTINGS.gridLines, false);
   const { videoRef, ready, error, caps, setTorch } = useCameraStream(facing, streamOn);
   useEffect(() => {
     if (error === "permission") setPerm("denied");
@@ -425,7 +425,7 @@ export function CameraScreen() {
     out.width = Math.round(sw);
     out.height = Math.round(sh);
     const ctx = out.getContext("2d")!;
-    if (front && !getSetting("isMirrorMode")) { ctx.translate(out.width, 0); ctx.scale(-1, 1); }
+    if (front && !getSetting(SETTINGS.mirrorFront)) { ctx.translate(out.width, 0); ctx.scale(-1, 1); }
     ctx.drawImage(c, sx, sy, sw, sh, 0, 0, out.width, out.height);
     return out;
   }, [prev, vis, front, W, H]);
@@ -510,7 +510,7 @@ export function CameraScreen() {
       const c = canvasRef.current!;
       const s = c.width / prev.w;
       const sx = Math.max(0, (vis.x - prev.x) * s), sy = Math.max(0, (vis.y - prev.y) * s);
-      return { sx, sy, sw: Math.min(c.width - sx, vis.w * s), sh: Math.min(c.height - sy, vis.h * s), flip: front && !getSetting("isMirrorMode") };
+      return { sx, sy, sw: Math.min(c.width - sx, vis.w * s), sh: Math.min(c.height - sy, vis.h * s), flip: front && !getSetting(SETTINGS.mirrorFront) };
     },
     onAutoStop: openVideoConfirm,
     onError: showToast,

@@ -1,98 +1,82 @@
 "use client";
 
-// Face-driven tabs of the video editor:
-//  - AR filter (VideoEditTabType.Frame → VideoEditStickerListFragment, fragment_video_edit_sticker_list.xml)
-//  - Beauty   (VideoEditTabType.Reshape → EVReshapeFragment, fragment_edit_video_portrait_reshape.xml)
-//  - Reshape  (VideoEditTabType.Retouch → VideoEditRetouchFragment, fragment_video_edit_retouch.xml)
-// Faces come from the web face engine (MediaPipe) running on every rendered frame (engine.ts).
-import { useEffect, useRef, useState } from "react";
-import { d } from "@/components/ui/legacy-drawable";
+// Face-driven tabs of the video editor, tracked on every rendered frame by the web face engine (engine.ts):
+//  - Face FX: AR stickers.
+//  - Face shape: the photo editor's face-shape controls, applied to every frame.
+//  - Liquify: drag on a face to push it; the warp is anchored to the face so it follows it.
+import { useEffect, useState } from "react";
+import { Icon, Spinner, Tabs, cx } from "@/components/ui";
 import { LOCAL_STICKER_CATEGORIES, fetchStickerCatalog, type Sticker, type StickerCategory } from "@/data/camera/stickers";
 import { FACE_SHAPES, RESHAPE_CATS, type ReshapeItem } from "@/components/edit/tools/portrait/faceData";
-import { EditSeekBar, FeatureButton } from "@/components/edit/ui";
+import { ChipRow, CtrlIcon, EditBar, EditSeekBar, HintPill, ToolChip } from "@/components/edit/ui";
 import type { FaceData, WarpOp } from "@/lib/face";
-import { BRUSHES, PRIMARY, STR, fmtDuration, type Reshape } from "./model";
-import { NetworkError, Spinner, Tint } from "./ui";
+import { BRUSHES, STR, type Reshape } from "./model";
+import { PlayRow } from "./ui";
 
-const SERVER: StickerCategory = { id: -1, icon: "sticker_navigation_error", grayIcon: "sticker_navigation_error_off", stickers: [], server: true };
-const SHADOW = "2px 2px 1px rgba(0,0,0,0.4)";
-
-/* ------------------------------------------------------------------ AR filter */
+/* ------------------------------------------------------------------ Face FX */
 
 export function ArFilterPanel({ selectedId, loadingId, onSelect }: { selectedId: number | null; loadingId: number | null; onSelect: (s: Sticker | null) => void }) {
-  const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
-  const [server, setServer] = useState<StickerCategory[]>([]);
+  const [remote, setRemote] = useState<StickerCategory[]>([]);
   const [sel, setSel] = useState(0);
-  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetchStickerCatalog().then((c) => { if (alive) { setServer(c); setPhase("ready"); } }).catch(() => alive && setPhase("error"));
+    fetchStickerCatalog().then((c) => { if (alive) setRemote(c); }).catch(() => undefined);
     return () => { alive = false; };
-  }, [attempt]);
-  const cats = [...LOCAL_STICKER_CATEGORIES, ...(server.length ? server : [SERVER])];
+  }, []);
+  const cats = [...LOCAL_STICKER_CATEGORIES, ...remote];
   const cat = cats[Math.min(sel, cats.length - 1)];
-  const pagePhase = cat.server ? phase : "ready";
   return (
-    <div className="absolute inset-x-0 bg-black" style={{ bottom: 14, height: 50 + 69 }}>
-      {/* sticker_category_recycler_view (50dp): edit_sticker_image_category_item 40dp / 35dp icon */}
-      <div className="no-scrollbar flex items-center overflow-x-auto" style={{ height: 50 }}>
-        <button type="button" onClick={() => onSelect(null)} className="flex h-full shrink-0 items-center justify-center" style={{ width: 51 }} aria-label="none">
-          <img src={d("icon_sticker_none")} alt="" style={{ width: 35, height: 35 }} draggable={false} />
+    <div className="flex h-full flex-col justify-center gap-3">
+      <div className="flex items-center gap-2 pl-3">
+        <button
+          type="button" aria-label="No filter" aria-pressed={selectedId == null} onClick={() => onSelect(null)}
+          className={cx("oe-press flex h-9 w-9 flex-none items-center justify-center rounded-full", selectedId == null ? "bg-fg text-bg" : "bg-raised text-fg-2")}
+        >
+          <Icon name="block" size={18} />
         </button>
-        {cats.map((c, i) => (
-          <button key={c.id} type="button" data-cat={c.id} onClick={() => setSel(i)} className="flex h-full shrink-0 items-center justify-center" style={{ width: 40, marginLeft: 6 }}>
-            <img src={d((c === cat ? c.icon : c.grayIcon ?? c.icon) ?? "sticker_default_category")} alt="" style={{ width: 35, height: 35, opacity: c === cat || c.grayIcon !== c.icon ? 1 : 0.4 }} draggable={false} />
-          </button>
-        ))}
+        <ChipRow className="pl-1 pr-3">
+          {cats.map((c, i) => <ToolChip key={c.id} label={c.text ?? `Set ${i + 1}`} selected={c === cat} onClick={() => setSel(i)} />)}
+        </ChipRow>
       </div>
-      {/* sticker_recycler_view (69dp cells) */}
-      <div className="relative" style={{ height: 69 }}>
-        {pagePhase === "ready" && (
-          <div className="no-scrollbar flex h-full items-center overflow-x-auto">
-            {cat.stickers.map((s) => {
-              const on = s.id === selectedId;
-              return (
-                <button key={s.id} data-sticker={s.id} type="button" onClick={() => onSelect(on ? null : s)} className="relative flex-none" style={{ width: 69, height: 69 }}>
-                  <img src={s.thumbnail.includes("/") ? s.thumbnail : d(s.thumbnail)} alt="" className="absolute" style={{ left: 7.5, top: 7.5, width: 54, height: 54, borderRadius: 3, objectFit: "contain" }} draggable={false} />
-                  {on && <img src={d("sticker_select")} alt="" className="absolute" style={{ left: 3, top: 3, width: 63, height: 63 }} draggable={false} />}
-                  {loadingId === s.id && <span className="absolute" style={{ right: 8, bottom: 8 }}><Spinner size={16} /></span>}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {pagePhase === "loading" && <div className="absolute inset-0 flex items-center justify-center"><Spinner /></div>}
-        {pagePhase === "error" && <NetworkError style={{ top: "50%", transform: "translateY(-50%)" }} onRetry={() => { setPhase("loading"); setAttempt((a) => a + 1); }} />}
+      <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-4">
+        {cat.stickers.map((s) => {
+          const on = s.id === selectedId;
+          return (
+            <button key={s.id} data-sticker={s.id} type="button" onClick={() => onSelect(on ? null : s)} aria-pressed={on} className="oe-press flex w-16 flex-none flex-col items-center gap-1">
+              <span className={cx("relative flex h-16 w-16 items-center justify-center rounded-md bg-raised", on && "ring-2 ring-accent ring-offset-2 ring-offset-panel")}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={s.thumbnail} alt="" className="h-[78%] w-[78%] object-contain" draggable={false} />
+                {loadingId === s.id && <span className="absolute inset-0 flex items-center justify-center rounded-md bg-bg/50"><Spinner size={18} className="text-accent" /></span>}
+              </span>
+              {s.name && <span className={cx("w-full truncate text-center text-[11px] font-medium", on ? "text-fg" : "text-fg-2")}>{s.name}</span>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ shared: play control row */
+/* ------------------------------------------------------------------ shared */
 
-/** container_play_control / area_bottom_feature top row: video_retouch_player_icon 22dp, seek bar (thumb 7), time 11dp. */
-function PlayRow({ playing, pos, start, end, onToggle, onSeek, style }: {
-  playing: boolean; pos: number; start: number; end: number; onToggle: () => void; onSeek: (ms: number) => void; style?: React.CSSProperties;
-}) {
+const PAGE_H = 236;
+
+/** Face status over the preview: still looking, or none found. */
+function FaceStatus({ faceReady, noFace }: { faceReady: boolean; noFace: boolean }) {
+  if (faceReady && !noFace) return null;
   return (
-    <div className="absolute inset-x-0 flex items-center" style={{ height: 47, ...style }}>
-      <button type="button" onClick={onToggle} style={{ marginLeft: 15, width: 22, height: 22 }} aria-label="play">
-        <img src={d(playing ? "edit_video_player_pause" : "edit_video_player_play")} alt="" style={{ width: 22, height: 22 }} draggable={false} />
-      </button>
-      <EditSeekBar style={{ marginLeft: 16 }} value={pos} min={start} max={end} def={start} level={false} onChange={onSeek} />
-      <span className="text-white" style={{ margin: "0 20px", fontSize: 11 }}>{fmtDuration(pos - start)}</span>
+    <div className="pointer-events-none absolute inset-x-0 z-10 flex justify-center" style={{ top: 64 }}>
+      {!faceReady
+        ? <span className="flex items-center gap-2 rounded-full bg-glass px-3 py-1.5 text-[12px] font-medium text-white backdrop-blur-md"><Spinner size={14} className="text-accent" />{STR.faceCheck}</span>
+        : <HintPill text={STR.noFace} />}
     </div>
   );
 }
 
-function FaceGuide({ text }: { text: string | null }) {
-  if (!text) return null;
-  return <div className="pointer-events-none absolute inset-x-0 flex justify-center text-center text-white" style={{ top: "40%", padding: "0 20px", fontSize: 17, textShadow: SHADOW }}>{text}</div>;
-}
-
-/* ------------------------------------------------------------------ Beauty (EVReshapeFragment) */
+/* ------------------------------------------------------------------ Face shape */
 
 type Item = { kind: "shape"; key: string } | { kind: "re"; it: ReshapeItem };
+const STYLES = -1;
 
 export function BeautyPanel({ value, faces, faceReady, playing, pos, start, end, onToggle, onSeek, onChange, onOriginal, onClose, onConfirm }: {
   value: Reshape; faces: FaceData[]; faceReady: boolean; playing: boolean; pos: number; start: number; end: number;
@@ -101,10 +85,8 @@ export function BeautyPanel({ value, faces, faceReady, playing, pos, start, end,
 }) {
   const [cat, setCat] = useState(0);
   const [item, setItem] = useState<Item | null>(null);
-  const [shapesOpen, setShapesOpen] = useState(false);
   const [partial, setPartial] = useState<"" | "_left" | "_right">("");
   const [flash, setFlash] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
   const reKey = item?.kind === "re" ? item.it.key + (item.it.p ? partial : "") : "";
   const v = item?.kind === "shape" ? (value.shape?.key === item.key ? value.shape.v : 0) : item ? value.re[reKey] ?? 0 : 0;
   const duplex = item?.kind === "re" && !!item.it.d;
@@ -113,73 +95,43 @@ export function BeautyPanel({ value, faces, faceReady, playing, pos, start, end,
     onChange(item.kind === "shape" ? { ...value, shape: { key: item.key, v: x } } : { ...value, re: { ...value.re, [reKey]: x } });
   };
   const mod = (k: string) => [k, `${k}_left`, `${k}_right`].some((x) => Math.abs(value.re[x] ?? 0) > 0.001);
-  const goCat = (i: number) => {
-    setCat(i);
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-cat="${i}"]`);
-    if (el && listRef.current) listRef.current.scrollTo({ left: el.offsetLeft - 4, behavior: "smooth" });
-  };
+  const catMod = (i: number) => (i === STYLES ? !!value.shape && value.shape.v > 0.001 : RESHAPE_CATS[i].items.some((it) => mod(it.key)));
   const noFace = faceReady && faces.length === 0;
   return (
-    <div className="absolute inset-0 z-[40]" style={{ pointerEvents: "none" }}>
-      <FaceGuide text={!faceReady ? null : noFace ? STR.noFace : null} />
-      {!faceReady && <div className="absolute inset-x-0 flex justify-center" style={{ bottom: 153 + 47 + 54 + 20 }}><Spinner /></div>}
-      {/* toggle_partial (PartialOptionToggleView): Left / Both / Right */}
+    <div className="pointer-events-none absolute inset-0 z-[40]">
+      <FaceStatus faceReady={faceReady} noFace={noFace} />
       {item?.kind === "re" && item.it.p && (
-        <div className="absolute inset-x-0 flex justify-center" style={{ bottom: 153 + 47 + 54 + 6, pointerEvents: "auto" }}>
-          <div className="flex" style={{ height: 28, borderRadius: 14, background: "rgba(0,0,0,0.4)" }}>
-            {([["_left", "Left"], ["", "Both"], ["_right", "Right"]] as const).map(([k, l]) => (
-              <button key={l} type="button" onClick={() => setPartial(k)} className="flex items-center" style={{ padding: "0 12px", borderRadius: 14, fontSize: 12, color: partial === k ? "#222222" : "#ffffff", background: partial === k ? "#ffffff" : "transparent" }}>{l}</button>
-            ))}
-          </div>
+        <div className="pointer-events-auto absolute inset-x-0 flex justify-center" style={{ bottom: PAGE_H + 60 }}>
+          <Tabs look="segment" tone="overlay" className="w-[210px]" items={[{ id: "_left", label: "Left" }, { id: "both", label: "Both" }, { id: "_right", label: "Right" }]} value={partial || "both"} onChange={(k) => setPartial(k === "both" ? "" : k as "_left" | "_right")} />
         </div>
       )}
-      {/* container_control (54dp): seek_bar (left 68 / right 24) + btn_original 34dp */}
-      <div className="absolute inset-x-0 flex items-center" style={{ bottom: 153 + 47, height: 54, pointerEvents: "auto" }}>
-        <div className="flex flex-1" style={{ marginLeft: 68, marginRight: 24 }}>
+      <div className="pointer-events-auto absolute inset-x-0 flex items-center gap-2 px-3" style={{ bottom: PAGE_H + 6, height: 48 }}>
+        <div className="flex min-w-0 flex-1">
           {item && <EditSeekBar key={`${reKey}|${item.kind}`} value={v} min={duplex ? -1 : 0} max={1} def={0} duplex={duplex} flashKey={flash} onChange={set} />}
         </div>
-        <button type="button" aria-label="original" style={{ width: 34, height: 34, marginRight: 10 }}
-          onPointerDown={() => onOriginal(true)} onPointerUp={() => onOriginal(false)} onPointerLeave={() => onOriginal(false)}>
-          <img src={d("icon_edit_common_original")} alt="" style={{ width: 34, height: 34 }} draggable={false} />
-        </button>
+        <CtrlIcon name="original" enabled onHold={onOriginal} />
       </div>
-      <PlayRow playing={playing} pos={pos} start={start} end={end} onToggle={onToggle} onSeek={onSeek} style={{ bottom: 153, pointerEvents: "auto" }} />
-      {/* container_feature (153dp, black): list_menu (marginTop 10, paddingH 4) + 52dp bottom bar (close / EditTabLayout / confirm) */}
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: 153, pointerEvents: "auto" }}>
-        <div
-          ref={listRef} className="no-scrollbar absolute inset-x-0 flex overflow-x-auto" style={{ top: 10, padding: "0 4px", gap: 6 }}
-          onScroll={(e) => {
-            const x = e.currentTarget.scrollLeft + 40;
-            let c = 0;
-            e.currentTarget.querySelectorAll<HTMLElement>("[data-cat]").forEach((el) => { if (el.offsetLeft <= x) c = Number(el.dataset.cat); });
-            if (c !== cat) setCat(c);
-          }}
-        >
-          <FeatureButton icon="beauty_icon_face" label="Face" selected={shapesOpen} modified={!!value.shape && value.shape.v > 0.001} onClick={() => setShapesOpen((o) => !o)} />
-          {shapesOpen && FACE_SHAPES.map(([k, l]) => (
-            <FeatureButton key={k} icon={`faceshape_icon_${k}`} label={l} tint={false} selected={item?.kind === "shape" && item.key === k} onClick={() => { setItem({ kind: "shape", key: k }); setFlash((n) => n + 1); }} />
-          ))}
-          {RESHAPE_CATS.map((c, ci) => c.items.map((it, ii) => (
-            <div key={`${ci}${it.key}`} data-cat={ii === 0 ? ci : undefined} className="flex-none">
-              <FeatureButton icon={`beauty_icon_${it.key}`} label={it.label} selected={item?.kind === "re" && item.it === it} modified={mod(it.key)} onClick={() => { setItem({ kind: "re", it }); if (!it.p) setPartial(""); setFlash((n) => n + 1); }} />
-            </div>
-          )))}
-        </div>
-        <div className="absolute inset-x-0 bottom-0 flex items-center" style={{ height: 52 }}>
-          <button type="button" onClick={onClose} style={{ width: 52, height: 52 }} aria-label="close"><img src={d("icon_edit_title_close")} alt="" style={{ width: 52, height: 52 }} draggable={false} /></button>
-          <div className="no-scrollbar flex flex-1 items-center justify-between overflow-x-auto">
-            {RESHAPE_CATS.map((c, i) => (
-              <button key={c.label} type="button" onClick={() => goCat(i)} className="shrink-0 whitespace-nowrap" style={{ padding: "0 8px", fontSize: 13, fontWeight: cat === i ? 700 : 400, color: cat === i ? "#ffffff" : "rgba(255,255,255,0.4)" }}>{c.label}</button>
-            ))}
-          </div>
-          <button type="button" onClick={onConfirm} style={{ width: 52, height: 52 }} aria-label="confirm"><Tint name="icon_edit_title_confirm" size={52} color={PRIMARY} /></button>
-        </div>
+      <div className="pointer-events-auto">
+        <EditBar title="Face shape" onClose={onClose} onConfirm={onConfirm} />
+      </div>
+      <div className="pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col justify-center gap-3 rounded-t-xl bg-panel shadow-[0_-8px_24px_rgba(0,0,0,0.35)]" style={{ height: PAGE_H }}>
+        <PlayRow playing={playing} pos={pos} start={start} end={end} onToggle={onToggle} onSeek={onSeek} />
+        <ChipRow>
+          <ToolChip label="Styles" selected={cat === STYLES} modified={catMod(STYLES)} onClick={() => setCat(STYLES)} />
+          {RESHAPE_CATS.map((c, i) => <ToolChip key={c.label} label={c.label} selected={cat === i} modified={catMod(i)} onClick={() => setCat(i)} />)}
+        </ChipRow>
+        <div className="mx-4 h-px bg-line" />
+        <ChipRow>
+          {cat === STYLES
+            ? FACE_SHAPES.map(([k, l]) => <ToolChip key={k} label={l} selected={item?.kind === "shape" && item.key === k} modified={value.shape?.key === k && value.shape.v > 0.001} onClick={() => { setItem({ kind: "shape", key: k }); setFlash((n) => n + 1); }} />)
+            : RESHAPE_CATS[cat].items.map((it) => <ToolChip key={it.key} label={it.label} selected={item?.kind === "re" && item.it === it} modified={mod(it.key)} onClick={() => { setItem({ kind: "re", it }); if (!it.p) setPartial(""); setFlash((n) => n + 1); }} />)}
+        </ChipRow>
       </div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ Reshape (VideoEditRetouchFragment) */
+/* ------------------------------------------------------------------ Liquify */
 
 type V2 = [number, number];
 /** warp.ts subjectFrame (pixel space): eye-centre origin, X along the eyes, Y toward the chin, iod = interocular distance. */
@@ -212,72 +164,54 @@ export function RetouchPanel({ faces, faceReady, thumbs, selFace, onSelFace, bru
   onOriginal: (down: boolean) => void; playing: boolean; pos: number; start: number; end: number;
   onToggle: () => void; onSeek: (ms: number) => void; onClose: () => void; onConfirm: () => void; onRetry: () => void; tip: string | null;
 }) {
-  const H = 192; // video_edit_retouch_feature_height
   const noFace = faceReady && faces.length === 0;
   return (
     <div className="pointer-events-none absolute inset-0 z-[40]">
-      {/* guide_tooltip_layout: tooltip_drag_trigger 74dp + gallery_manual_tooltip 17dp */}
       {tip && (
-        <div className="absolute inset-x-0 top-0 flex flex-col items-center justify-center" style={{ bottom: H }}>
-          <img src={d("tooltip_drag_trigger")} alt="" style={{ width: 74, height: 74 }} draggable={false} />
-          <span className="text-center text-white" style={{ fontSize: 17, textShadow: "0 0 4px rgba(0,0,0,0.3)" }}>{tip}</span>
+        <div className="absolute inset-x-0 flex items-center justify-center px-10" style={{ top: 52, bottom: PAGE_H + 60 }}>
+          <HintPill text={tip} />
         </div>
       )}
-      {noFace && <div className="absolute inset-x-0 top-0 flex items-center justify-center text-center text-white" style={{ bottom: H, padding: "0 20px", fontSize: 17, textShadow: SHADOW }}>{STR.noFace}</div>}
-      {/* undo / redo (34dp, start 10 / +12) and compare (beauty_original) above the area */}
-      <div className="absolute flex" style={{ left: 10, bottom: H + 10, pointerEvents: "auto" }}>
-        <button type="button" disabled={!canUndo} onClick={onUndo} style={{ width: 34, height: 34 }}><img src={d("icon_edit_common_undo")} alt="" style={{ width: 34, height: 34, opacity: canUndo ? 1 : 0.4 }} draggable={false} /></button>
-        <button type="button" disabled={!canRedo} onClick={onRedo} style={{ width: 34, height: 34, marginLeft: 12 }}><img src={d("icon_edit_common_redo")} alt="" style={{ width: 34, height: 34, opacity: canRedo ? 1 : 0.4 }} draggable={false} /></button>
+      <FaceStatus faceReady={faceReady} noFace={noFace} />
+      <div className="pointer-events-auto absolute inset-x-0 flex items-center gap-1.5 px-3" style={{ bottom: PAGE_H + 6, height: 48 }}>
+        <CtrlIcon name="undo" enabled={canUndo} onClick={onUndo} />
+        <CtrlIcon name="redo" enabled={canRedo} onClick={onRedo} />
+        <span className="flex-1" />
+        <CtrlIcon name="original" enabled onHold={onOriginal} />
       </div>
-      <button type="button" className="absolute" style={{ right: 10, bottom: H + 10, width: 34, height: 34, pointerEvents: "auto" }}
-        onPointerDown={() => onOriginal(true)} onPointerUp={() => onOriginal(false)} onPointerLeave={() => onOriginal(false)} aria-label="compare">
-        <img src={d("beauty_original")} alt="" style={{ width: 34, height: 34 }} draggable={false} />
-      </button>
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: H, pointerEvents: "auto" }}>
-        <PlayRow playing={playing} pos={pos} start={start} end={end} onToggle={onToggle} onSeek={onSeek} style={{ top: 0 }} />
-        {/* face_recycler_view / loading / retry (below guide_line_top 47dp) */}
-        <div className="absolute inset-x-0 flex justify-center" style={{ top: 47, height: 48 }}>
-          {!faceReady && (
-            <div className="flex items-center" style={{ marginTop: 11, height: 16 }}>
-              <Spinner size={16} />
-              <span className="text-white" style={{ marginLeft: 8, fontSize: 12 }}>{STR.faceCheck}</span>
-            </div>
-          )}
+      <div className="pointer-events-auto">
+        <EditBar title="Liquify" onClose={onClose} onConfirm={onConfirm} />
+      </div>
+      <div className="pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col justify-center gap-4 rounded-t-xl bg-panel shadow-[0_-8px_24px_rgba(0,0,0,0.35)]" style={{ height: PAGE_H }}>
+        <PlayRow playing={playing} pos={pos} start={start} end={end} onToggle={onToggle} onSeek={onSeek} />
+        <div className="flex min-h-[44px] items-center justify-center gap-2 px-4">
+          {!faceReady && <span className="flex items-center gap-2 text-[13px] text-fg-3"><Spinner size={16} className="text-accent" />{STR.faceCheck}</span>}
           {noFace && (
-            <button type="button" onClick={onRetry} className="flex items-center" style={{ marginTop: 2, height: 32, borderRadius: 16, background: "rgba(255,255,255,0.15)", padding: "0 15px 0 13px" }}>
-              <img src={d("sticker_network_error")} alt="" style={{ width: 15, height: 15 }} draggable={false} />
-              <span className="text-white" style={{ marginLeft: 5, fontSize: 12 }}>{STR.faceRetry}</span>
+            <button type="button" onClick={onRetry} className="oe-press flex h-9 items-center gap-1.5 rounded-full bg-raised px-4 text-[13px] font-semibold">
+              <Icon name="reset" size={15} />{STR.faceRetry}
             </button>
           )}
           {faceReady && faces.length > 0 && (
-            <div className="flex" style={{ padding: "0 10px" }}>
+            <>
+              <span className="mr-1 text-[12px] font-medium text-fg-3">Face</span>
               {faces.map((_, i) => (
-                <button key={i} type="button" onClick={() => onSelFace(i)} className="relative" style={{ padding: "0 6px", height: 36 }}>
-                  <span className="block overflow-hidden rounded-full bg-[#333]" style={{ width: 36, height: 36 }}>
-                    {thumbs[i] && <img src={thumbs[i]} alt="" style={{ width: 36, height: 36, objectFit: "cover" }} draggable={false} />}
+                <button key={i} type="button" aria-label={`Face ${i + 1}`} aria-pressed={i === selFace} onClick={() => onSelFace(i)} className="oe-press rounded-full p-0.5">
+                  <span className={cx("block h-10 w-10 overflow-hidden rounded-full bg-raised", i === selFace && "ring-2 ring-accent ring-offset-2 ring-offset-panel")}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {thumbs[i] && <img src={thumbs[i]} alt="" className="h-full w-full object-cover" draggable={false} />}
                   </span>
-                  {i === selFace && <span className="absolute rounded-full" style={{ left: 6, top: 0, width: 36, height: 36, border: `1.5px solid ${PRIMARY}`, boxShadow: "inset 0 0 0 1.5px #000" }} />}
                 </button>
               ))}
-            </div>
+            </>
           )}
         </div>
-        {/* area_brush_size: marginTop 56 below the guide, "Size" 13dp + 26dp brush cells (marginStart 27) */}
-        <div className="absolute inset-x-0 flex items-center justify-center" style={{ top: 47 + 56, height: 26 }}>
-          <span className="text-white" style={{ fontSize: 13 }}>{STR.size}</span>
-          <div className="flex" style={{ marginLeft: 27, gap: 10 }}>
-            {BRUSHES.map((b, i) => (
-              <button key={i} type="button" onClick={() => onBrush(i)} className="flex items-center justify-center" style={{ width: 26, height: 26 }} aria-label={`size ${i + 1}`}>
-                <span className="rounded-full" style={{ width: b.size, height: b.size, background: i === brush ? PRIMARY : "#ffffff" }} />
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* area_confirm_cancel (44dp): icon_common_cancel 28 / "Reshape" 13dp / icon_check tinted primary */}
-        <div className="absolute inset-x-0 bottom-0 flex items-end" style={{ height: 44 }}>
-          <button type="button" onClick={onClose} style={{ marginLeft: 10, marginBottom: 8, width: 28, height: 28 }} aria-label="cancel"><img src={d("icon_common_cancel")} alt="" style={{ width: 28, height: 28 }} draggable={false} /></button>
-          <span className="flex-1 text-center" style={{ marginBottom: 8, fontSize: 13, lineHeight: "28px", color: "#fefefe" }}>Reshape</span>
-          <button type="button" onClick={onConfirm} style={{ marginRight: 10, marginBottom: 8, width: 28, height: 28 }} aria-label="confirm"><Tint name="icon_check" size={28} color={PRIMARY} /></button>
+        <div className="flex items-center justify-center gap-4">
+          <span className="text-[12px] font-medium text-fg-3">{STR.size}</span>
+          {BRUSHES.map((b, i) => (
+            <button key={i} type="button" onClick={() => onBrush(i)} aria-pressed={i === brush} className="flex h-8 w-8 items-center justify-center" aria-label={`Brush size ${i + 1}`}>
+              <span className={cx("rounded-full transition-colors", i === brush ? "bg-accent" : "bg-fg-3")} style={{ width: b.size, height: b.size }} />
+            </button>
+          ))}
         </div>
       </div>
     </div>

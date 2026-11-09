@@ -1,13 +1,13 @@
 "use client";
 
-// Shared plumbing for the on-device AI tools (src/lib/ai): async bake, cancellable AI jobs with
-// EditAiLoading progress, and the B612 step texts.
+// Shared plumbing for the on-device AI tools (src/lib/ai): async bake, cancellable AI jobs with a progress
+// percentage, and the step captions shown on the progress card.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isAbort, type Progress } from "@/lib/ai";
 import { useEdit } from "../ctx";
 
-/** EditAiLoading step text: "Preparing" ≤10%, "Loading" ≤50%, "Please wait a moment" ≤90%, else "It is almost done". */
-const STEPS = ["Preparing", "Loading", "Please wait a moment", "It is almost done"];
+/** Progress caption: getting ready ≤10%, fetching the model ≤50%, processing ≤90%, then finishing. */
+const STEPS = ["Getting ready", "Fetching the model", "Processing your photo", "Almost done"];
 export const aiStepText = (p: number) => `${STEPS[p <= 10 ? 0 : p <= 50 ? 1 : p <= 90 ? 2 : 3]}\n${p}%`;
 
 /** Maps model download (0–40%) and inference (40–99%) progress to one percentage. */

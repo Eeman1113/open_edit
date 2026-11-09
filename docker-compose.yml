@@ -1,0 +1,27 @@
+# Local or single-host deployment: docker compose up --build  →  http://localhost:3000
+# Put secrets in .env (see .env.example); they are passed to the server only.
+services:
+  open_edit:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_ASSET_PACK: ${NEXT_PUBLIC_ASSET_PACK:-open}
+        NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
+        OE_COEP: ${OE_COEP:-credentialless}
+    image: open_edit:latest
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped

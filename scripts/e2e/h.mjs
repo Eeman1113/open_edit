@@ -1,8 +1,35 @@
 // shared helpers for flows
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { SCRATCH } from "./lib.mjs";
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+/** Test photo: E2E_PHOTO, else a photo kept in the scratch folder (outside the repo), else the pack's sample poster. */
+export const TEST_PHOTO = process.env.E2E_PHOTO
+  ?? (existsSync(path.join(SCRATCH, "user.jpg")) ? path.join(SCRATCH, "user.jpg") : path.join(REPO, "public/packs/open/videos/clip-1.jpg"));
+/** Test video: E2E_VIDEO, else the pack's generated sample clip. */
+export const TEST_VIDEO = process.env.E2E_VIDEO ?? path.join(REPO, "public/packs/open/videos/clip-1.mp4");
+/** IndexedDB database of the gallery (src/lib/store.ts). */
+export const GALLERY_DB = "openedit";
 export const hasImg = (name) => `!![...document.querySelectorAll('img')].find(i => i.src.includes('/${name}.') && i.getBoundingClientRect().width > 0) || [...document.querySelectorAll('[style*="${name}."]')].some(e => e.getBoundingClientRect().width > 0)`;
 export const textOn = (t) => `document.body.innerText.includes(${JSON.stringify(t)})`;
 export const pathIs = (p) => `location.pathname === ${JSON.stringify(p)}`;
-export const camReady = `!!document.querySelector('[aria-label="shutter"]') && !document.querySelector('img[src*="splash_kaji"]')`;
+/** Shutter button (photo or video mode). */
+export const SHUTTER = `document.querySelector('[aria-label="Take photo"], [aria-label="Record video"], [aria-label="Stop recording"], [aria-label="Resume recording"]')`;
+/** Line shown on the launch screen (src/components/home/Splash.tsx) until the camera is ready. */
+export const SPLASH_TEXT = "runs on your device";
+export const splashUp = `document.body.innerText.includes(${JSON.stringify(SPLASH_TEXT)})`;
+/** Camera is up: shutter present and the launch screen gone. */
+export const camReady = `!!(${SHUTTER}) && !(${splashUp})`;
+/** Bottom navigation tab by route ("/home", "/discover", "/", "/ai", "/my"); use with s.click(). */
+export const navTab = (href) => ({ sel: `nav a[href="${href}"]` });
+/** The bottom navigation highlights the tab for `href`. */
+export const navActive = (href) => `document.querySelector('nav a[aria-current=page]')?.getAttribute('href') === ${JSON.stringify(href)}`;
+/** Take a photo without a pointer (dev-only hook exposed by the camera screen). */
+export const shoot = `(window.__oeShoot ? (window.__oeShoot(), true) : false)`;
+/** The capture review screen is showing. */
+export const reviewUp = `!!document.querySelector('[aria-label="Save to gallery"]')`;
 
 export async function openCamera(s, { fresh = false } = {}) {
   if (fresh || (await s.ev("location.pathname")) !== "/") await s.goto("/", { wait: camReady, settle: 1200 });

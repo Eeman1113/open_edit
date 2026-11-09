@@ -1,26 +1,26 @@
+// App links (openedit://…) resolved by /s?url=… (src/components/scheme/dispatch.ts).
 const enc = (u) => "/s?url=" + encodeURIComponent(u);
 const CASES = [
-  ["gnb-home", "b612://gnb?gnb=home", `location.pathname === '/home'`],
-  ["gnb-discover", "b612://gnb?gnb=discover", `location.pathname === '/discover'`],
-  ["gnb-ai", "b612://gnb?gnb=ai", `location.pathname === '/ai'`],
-  ["gnb-my", "b612://gnb?gnb=my", `location.pathname === '/my'`],
-  ["camera-filter", "b612://go?filterid=254", `location.pathname === '/' && location.search.includes('filter=254')`],
-  ["camera-sticker", "b612://previewcamera?stickerid=9000101", `location.pathname === '/' && location.search.includes('sticker=9000101')`],
-  ["discover-post", "b612://discover?postid=p0_0", `location.pathname === "/discover/post/p0_0" && document.body.innerText.includes("Try")`],
-  ["discover-search", "b612://discover?search", `location.pathname === '/discover/search'`],
-  ["album", "b612://album", `location.pathname === '/gallery'`],
-  ["qrcode", "b612://qrCode", `location.pathname === '/discover/qr'`],
-  ["lens", "b612://lens", `location.pathname === '/lens'`],
-  ["studio", "b612://studio", `location.pathname === '/studio'`],
-  ["shop", "b612://shop", `location.pathname === '/stamp-shop'`],
-  ["home", "b612://home", `location.pathname === '/home'`],
-  ["aicontent", "b612://aicontent", `location.pathname === '/ai'`],
-  ["aistyle", "b612://aistyle", `location.pathname === '/aistyle'`],
-  ["open-notification", "b612://open?page=notification", `location.pathname === '/settings/notification'`],
-  ["open-my", "b612://open?page=my", `location.pathname === '/my'`],
-  ["terms", "b612://termsofuse", `location.pathname.startsWith('/settings/web')`],
-  ["signup", "b612://signup", `location.pathname === '/my/login'`],
-  ["purchase-no-vip", "b612://purchase", `location.pathname === '/'`],
+  ["tab-home", "openedit://home", `location.pathname === '/home'`],
+  ["tab-discover", "openedit://discover", `location.pathname === '/discover'`],
+  ["tab-ai", "openedit://ai", `location.pathname === '/ai'`],
+  ["tab-me", "openedit://me", `location.pathname === '/my'`],
+  ["camera-filter", "openedit://camera?filter=4", `location.pathname === '/' && location.search.includes('filter=4')`],
+  ["camera-sticker", "openedit://camera?sticker=103", `location.pathname === '/' && location.search.includes('sticker=103')`],
+  ["discover-post", "openedit://discover?post=p0_0", `location.pathname === "/discover/post/p0_0" && document.body.innerText.includes("Try")`],
+  ["discover-search", "openedit://discover?search", `location.pathname === '/discover/search'`],
+  ["gallery", "openedit://gallery", `location.pathname === '/gallery'`],
+  ["collage", "openedit://collage", `location.pathname === '/gallery' && location.search.includes('collage')`],
+  ["qr", "openedit://qr", `location.pathname === '/discover/qr'`],
+  ["lens", "openedit://lens", `location.pathname === '/lens'`],
+  ["studio", "openedit://studio", `location.pathname === '/studio'`],
+  ["shop", "openedit://shop", `location.pathname === '/stamp-shop'`],
+  ["ai-tool", "openedit://ai?tool=enhance", `location.pathname === '/aimode'`],
+  ["aistyle", "openedit://aistyle", `location.pathname === '/aistyle'`],
+  ["notifications", "openedit://notifications", `location.pathname === '/settings/notification'`],
+  ["settings", "openedit://settings", `location.pathname === '/settings'`],
+  ["web", "openedit://web?url=https%3A%2F%2Fexample.com", `location.pathname.startsWith('/settings/web')`],
+  ["plain-path", "/discover", `location.pathname === '/discover'`],
 ];
 export default async function flowDeeplinks(s) {
   for (const [name, url, check] of CASES) {
@@ -31,8 +31,12 @@ export default async function flowDeeplinks(s) {
       const a = await s.visualAudit(); if (a.length) throw new Error("visual: " + a.join("; "));
     });
   }
-  await s.step("unknown-scheme", async () => {
-    await s.goto(enc("b612://nonexistent_host_xyz"), { settle: 2500 });
-    await s.assert(`location.pathname !== '/s' || document.body.innerText.length > 0`, "unknown scheme handled");
+  await s.step("unknown-page", async () => {
+    await s.goto(enc("openedit://nonexistent_page_xyz"), { settle: 2500 });
+    await s.assert(`location.pathname === '/'`, "unknown page falls back to the camera");
+  });
+  await s.step("foreign-scheme", async () => {
+    await s.goto(enc("javascript:alert(1)"), { settle: 2000 });
+    await s.assert(`location.pathname === '/' || location.pathname === '/s'`, "non-app scheme ignored");
   });
 }

@@ -70,9 +70,10 @@ Resolution order:
 2. Pack `icon/<name>`: a single-colour image, drawn as a CSS mask so it follows `currentColor`.
 3. Otherwise the bundled lucide-react glyph (ISC) at a 1.75 stroke.
 
-`ui/legacy-drawable.ts` exports a deprecated `d(id)` for the screens that haven't been reskinned yet (the photo
-editor, the video editor and collage). It returns a data-URL glyph picked from keywords in the old id. Remove it once
-those screens use `<Icon>`.
+The editors add their own semantic ids (adjust items such as `curves`, `brightness`, `warmth`, `vignette`; tools such as
+`tools`, `rotate-left`, `flip-h` / `flip-v`, `skew-h` / `skew-v`, `face-3d`, `body`, `brush`, `paint`, `merge`, `library`,
+`speed`, `reverse`, `stack-v` / `stack-h`, `replace`). `flip-h` mirrors left ↔ right and `flip-v` top ↔ bottom.
+Aspect ratios are not icons: they are drawn as a rounded box of that ratio (`RatioGlyph`).
 
 ## Components
 
@@ -107,6 +108,38 @@ Helpers in `ui/app.ts`: `useGoBack(fallback)`, `PHOTOS_EVENT` (gallery changed),
 - **Review:** the result fills its frame. The bottom bar has Share · Save (a large accent pill: Save → Saving → Saved) ·
   Edit. A White border sheet offers aspect presets.
 - **Lists and settings:** grouped rounded panels on the ink background, 56 px rows, and caps section labels.
+- **Editors (photo, video, collage):** the shared building blocks are in `src/components/edit/ui.tsx` and
+  `edit/tools/common.tsx`; the video editor and the collage maker use the same pieces.
+  - *Shell:* a solid top bar (52 px): back (raised round button) · undo / redo · layers (with a count badge) · **Save**
+    (accent pill). The photo sits in a soft radial vignette between the top bar and the **dock**, a 200 px `panel`
+    sheet with `rounded-t-xl`, a shadow and a 60 px tab bar at its foot. Tabs are an icon over an 11 px label; the
+    active tab is `fg` with a short accent bar on its top edge, the rest are `fg-3`.
+  - *Tool pages:* opening a tool swaps the top bar for its command row (portalled into the bar): Cancel (raised round
+    ✕) · title or a segmented switch (`BarTabs`) · Apply (accent round ✓), or a **Generate** pill when the next step is
+    an AI run. The tool's controls fill the whole dock. Collage pages use the same row (`PageBar`).
+  - *Over the photo:* a 48 px control row floats just above the dock: local undo / redo on the left, the active slider
+    in the middle, hold-to-compare on the right, all as `glass` round buttons. Extra controls (brush size, strength,
+    colour rows, blend modes) sit in a floating card (`OptionRow`: `panel` at 90% with a blur, `rounded-lg`, a hairline
+    ring) between the control row and the dock. Hints use `HintPill`; busy states use a glass pill with a spinner;
+    on-device AI runs show a centred card with a progress ring, a step caption, "Runs on your device" and Cancel.
+  - *Picking things:* `FeatureButton` tiles (44 px `raised` square with the icon, label below; selected = accent tile,
+    edited = accent dot) for tools and adjustments; `ToolChip` text chips (selected = inverted) for long lists of named
+    sliders (face shape, retouch items, body, blend modes, categories); `ThumbItem` picture tiles (selected = accent
+    ring with a check badge) for filters, tones, looks and effects; `ColorChip` swatches (selected = light ring with a
+    gap) and `SwatchTool` round tool buttons (eyedropper, colour wheel, none).
+  - *Sliders:* `EditSeekBar`: a 4 px track, accent fill (from the centre for ± values, a gradient track for colour
+    sliders), a tick at the default that the thumb snaps to, a white thumb with an accent halo while dragging and a
+    small value bubble. `SliderRow` adds a caption and the value.
+  - *On-photo handles:* layers get an accent outline with white round corner handles and an accent rotate handle;
+    crop and expand frames use accent L-shaped corners; the trim strip has accent handles and a white playhead.
+  - *Results:* Save shows a "Saving full size…" card, then the **Saved** page (the result in a rounded frame, a green
+    check, "Saved · It's in your gallery", Share and Open gallery). Share opens a `Sheet` with the device share menu
+    (when the browser has one) and Download.
+  - *Deep links:* `/edit?id=<photo>&tool=<tool>` opens straight into a tool: `crop`, `enhance`, `remove`,
+    `generativefill`, `dslr`, `cutout`, `mosaic`, or a Portrait page id such as `HAIRCOLOR`.
+  - *Content:* sticker packs are drawn in code (`edit/stamps.ts`) and added from the Sticker library; face filters,
+    filters, brushes, fonts and collage layouts come from the asset pack. Features that need an online catalogue
+    (music) say so plainly instead of showing an error.
 - **Copy:** short, plain, friendly sentences in British spelling ("colour", "favourites"). No account or premium
   language anywhere.
 

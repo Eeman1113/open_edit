@@ -1,0 +1,41 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the report. Please don't include personal photos; describe them or use a sample image instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the camera
+        2. Tap Effects → Kitty
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Chrome 140 on Pixel 8 / Safari 19 on iPhone 16
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Open_Edit version or commit
+      description: Shown in Settings → About Open_Edit.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output or screenshots
+      render: text

@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, lint, audit, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npx eslint src
+
+      - name: Provenance and licence audit
+        run: npm run audit
+
+      - name: Production build
+        # Dummy server-only secrets: the next step proves none of them ends up in the browser bundles.
+        env:
+          OE_SESSION_SECRET: ci-session-secret-0123456789abcdefghijklmnop
+          OE_CONTENT_API_URL: https://content.ci-placeholder.invalid/v1
+          OE_CONTENT_API_KEY: ci-content-key-0123456789
+        run: npm run build
+
+      - name: No server secrets in client bundles
+        env:
+          OE_SESSION_SECRET: ci-session-secret-0123456789abcdefghijklmnop
+          OE_CONTENT_API_URL: https://content.ci-placeholder.invalid/v1
+          OE_CONTENT_API_KEY: ci-content-key-0123456789
+        run: npm run audit:secrets
+
+      - name: Smoke test the standalone server
+        run: |
+          PORT=3123 node .next/standalone/server.js &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3123/api/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:3123/api/music | head -c 200; echo
+          curl -fsSI http://127.0.0.1:3123/ | grep -i "cross-origin-embedder-policy"
+          kill %1
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: open_edit:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,25 +1,26 @@
 "use client";
 
-// Shared face-tool plumbing: detection on open (EditLoading), FaceGuideLayout / FaceGuideView (multi-face brackets,
-// tap to select, blink), the multi-face banner, the no-face tooltip, and the per-face FaceEdit draft that is previewed
-// live through the editor pipeline and committed on confirm.
+// Shared face-tool plumbing: face detection when a page opens, the face picker (brackets around every face when there
+// are several, tap to select), the multi-face banner, the no-face hint, and the per-face draft that is previewed live
+// through the editor pipeline and committed on Apply.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FaceData } from "@/lib/face";
 import { useEdit } from "../../ctx";
 import type { FaceEdit, FaceVals } from "../../model";
+import { TOKENS } from "@/components/ui";
 import { EditLoading, MENU, S, TextTooltip, usePhotoArea, type PhotoArea } from "../common";
 import { detectFaces, ensureFaceAssets } from "./faceEngine";
 
-/* ------------------------------------------------------------------ geometry (FaceGuideView) */
+/* ------------------------------------------------------------------ face picker geometry */
 
-// FaceGuideView uses the ulsee 68-point shape: brackets through 15/13/11 and 1/3/5 around 28, touch rect from 1/15.
-// dlib -> MediaPipe: 1 -> 93, 3 -> 58, 5 -> 136, 11 -> 365, 13 -> 288, 15 -> 323, 28 -> 6.
+// MediaPipe face-mesh landmarks used for the picker: nose bridge (centre), and three points down each side of the face
+// (temple, cheek, jaw) that the side brackets pass through.
 const G = { c: 6, p1: 93, p3: 58, p5: 136, p11: 365, p13: 288, p15: 323 };
 
 type XY = [number, number];
 const toView = (f: FaceData, i: number, a: PhotoArea): XY => [a.x + f.points[i * 3] * a.w, a.y + f.points[i * 3 + 1] * a.h];
 
-/** Touch rect: square centred on point 28, half size = |p15 - p1| (FaceGuideView.m62546m). */
+/** Touch rect: a square centred on the nose bridge, half size = face width. */
 function touchRect(f: FaceData, a: PhotoArea) {
   const c = toView(f, G.c, a), p1 = toView(f, G.p1, a), p15 = toView(f, G.p15, a);
   const r = Math.hypot(p15[0] - p1[0], p15[1] - p1[1]);
@@ -42,7 +43,7 @@ function bracketPath(f: FaceData, a: PhotoArea) {
   return `${seg([G.p15, G.p13, G.p11])} ${seg([G.p1, G.p3, G.p5])}`;
 }
 
-/* ------------------------------------------------------------------ selection memory (setUseCachedIndex) */
+/* ------------------------------------------------------------------ remembers the picked face per photo */
 
 let cachedSel: { base: HTMLCanvasElement | null; i: number } = { base: null, i: -1 };
 const largest = (faces: FaceData[], a: PhotoArea) => {
@@ -100,9 +101,9 @@ export function useFaceDraft() {
 }
 
 /**
- * FaceGuideLayout: brackets around every face when there are >= 2 (selected #00ECD4, others white 70%), tap a face to
- * select it, blink on open, multi-face banner (max 3 times per content type), no-face tooltip, EditLoading while
- * detecting. Returns the selected face index (-100 = no face, -1 = still detecting).
+ * Face picker: brackets around every face when there are two or more (the selected one in the accent colour), tap a
+ * face to select it (the preview zooms to it), a pulse on open, a banner explaining it (at most three times), the
+ * no-face hint and a spinner while detecting. Returns the selected face index (-100 = no face, -1 = still detecting).
  */
 export function useFaceGuide(opts: { banner?: "BEAUTY" | "MAKEUP"; hidden?: boolean } = {}) {
   const { setTool, zoomTo } = useEdit();
@@ -123,8 +124,8 @@ export function useFaceGuide(opts: { banner?: "BEAUTY" | "MAKEUP"; hidden?: bool
   }, []);
   useEffect(() => () => window.clearTimeout(tipT.current), []);
 
-  // detection on open, then the initial selection: cached index for the same photo, else the largest face
-  // (FaceGuideView.m62548q); multi-face banner; no-face tooltip
+  // detection on open, then the initial selection: the face picked last time for this photo, else the largest face;
+  // the multi-face banner; the no-face hint
   const areaRef = useRef(area);
   useEffect(() => { areaRef.current = area; });
   useEffect(() => {
@@ -138,12 +139,12 @@ export function useFaceGuide(opts: { banner?: "BEAUTY" | "MAKEUP"; hidden?: bool
       setSelState(i);
       cachedSel = { base, i };
       if (fs.length > 1 && opts.banner) {
-        const key = opts.banner === "MAKEUP" ? "keyMakeupSelectFaceTooptipCount" : "keyBeautySelectFaceTooptipCount";
+        const key = opts.banner === "MAKEUP" ? "oe:edit:makeupFaceHint" : "oe:edit:beautyFaceHint";
         let n = 0;
         try { n = Number(localStorage.getItem(key) ?? 0); } catch { /* ignore */ }
         if (n < 3) {
           try { localStorage.setItem(key, String(n + 1)); } catch { /* ignore */ }
-          setBanner({ text: opts.banner === "MAKEUP" ? "Choose a face to apply makeup." : "Choose a face to apply beauty effects.", fading: false });
+          setBanner({ text: opts.banner === "MAKEUP" ? "Tap a face to choose who gets the makeup" : "Tap a face to choose who to retouch", fading: false });
         }
       }
     });
@@ -184,7 +185,7 @@ export function useFaceGuide(opts: { banner?: "BEAUTY" | "MAKEUP"; hidden?: bool
           if (p[0] >= r.x0 && p[0] <= r.x1 && p[1] >= r.y0 && p[1] <= r.y1) {
             setSelState(i);
             cachedSel = { base: cachedSel.base, i };
-            // baa.C3828a.mo3310c(i, true): zoom the preview onto the newly selected face (rect-to-rect, CENTER, 300 ms)
+            // zoom the preview onto the newly selected face
             zt?.({ x: r.x0, y: r.y0, w: r.w, h: r.y1 - r.y0 }, 300);
           }
         });
@@ -200,19 +201,19 @@ export function useFaceGuide(opts: { banner?: "BEAUTY" | "MAKEUP"; hidden?: bool
         <svg className="pointer-events-none absolute inset-x-0 top-0 z-[6]" width="100%" style={{ bottom: MENU, height: `calc(100% - ${MENU}px)`, animation: blink ? "faceGuideBlink 800ms ease-in-out 3 alternate" : undefined }}>
           <style>{"@keyframes faceGuideBlink { from { opacity: 0.3 } to { opacity: 1 } }"}</style>
           {faces.map((f, i) => (i === sel ? null : <path key={i} d={bracketPath(f, area)} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />))}
-          {sel >= 0 && faces[sel] && <path d={bracketPath(faces[sel], area)} fill="none" stroke="#00ECD4" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />}
+          {sel >= 0 && faces[sel] && <path d={bracketPath(faces[sel], area)} fill="none" stroke={TOKENS.color.accent} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />}
         </svg>
       )}
       <TextTooltip text={tip} />
-      {loading && <EditLoading />}
+      {loading && <EditLoading text="Looking for faces…" />}
     </>
   );
   const bannerNode = banner ? (
-    <div className="absolute inset-x-0 z-20 flex items-center justify-center truncate text-white" style={{ bottom: MENU, height: 45, fontSize: 14, background: "#0bd4d2", opacity: banner.fading ? 0 : 1, transition: "opacity 200ms" }}>
-      {banner.text}
+    <div className="pointer-events-none absolute inset-x-0 z-20 flex items-center justify-center px-4" style={{ bottom: MENU + 6, height: 40, opacity: banner.fading ? 0 : 1, transition: "opacity 200ms" }}>
+      <span className="truncate rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent shadow-lg">{banner.text}</span>
     </div>
   ) : null;
-  return { faces, sel, node, bannerNode, bannerH: banner ? 45 : 0, noFace: () => showTip(S.noFace), showTip, loading };
+  return { faces, sel, node, bannerNode, bannerH: banner ? 46 : 0, noFace: () => showTip(S.noFace), showTip, loading };
 }
 
 /** -100 trackId: nothing can be edited. */

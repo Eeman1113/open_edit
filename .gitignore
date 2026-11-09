@@ -47,3 +47,6 @@ next-env.d.ts
 # Only the built-in open asset pack is committed; other packs are licensed separately
 /public/packs/*
 !/public/packs/open/
+
+# keep the documented template
+!.env.example

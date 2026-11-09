@@ -1,25 +1,25 @@
 "use client";
 
-// EPAdjustFragment + EPCurveFragment / EPHSLFragment / EPSplitToneFragment.
+// Adjust tab: one-tap sliders plus three pages (Curves, Split tone, Colour mix).
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Button, Icon, cx } from "@/components/ui";
 import { useEdit } from "../ctx";
 import {
-  ADJUST_ITEMS, curvesModified, DEFAULT_SPLIT, HSL_COLORS, splineFn, SPLIT_HIGHLIGHT_COLORS, SPLIT_SHADOW_COLORS,
+  ADJUST_ITEMS, curvesModified, DEFAULT_CURVE, DEFAULT_SPLIT, HSL_COLORS, splineFn, SPLIT_HIGHLIGHT_COLORS, SPLIT_SHADOW_COLORS,
   type AdjustKey, type Curves, type Doc, type Pt,
 } from "../model";
-import { ColorChip, ControlRow, EditSeekBar, FeatureButton, FeatureList, Img, TitleBar, TitleTab } from "../ui";
+import { BarTabs, ColorChip, ControlRow, Dock, EditBar, EditSeekBar, FeatureButton, FeatureList, MENU, PanelArea, SliderRow } from "../ui";
 
 const hslModified = (h: number[]) => h.some((v) => Math.abs(v) > 0.001);
 const splitModified = (d: Doc) => !!(d.split.shadow.color || d.split.highlight.color);
 
 export function AdjustPanel() {
-  const { doc, setLive, commit, undo, redo, setOriginal, openSub, devAdjust } = useEdit();
-  // Entering Adjust: selection NONE, slider hidden (EPAdjustViewModel)
+  const { doc, setLive, commit, undo, setOriginal, openSub, devAdjust } = useEdit();
+  // nothing selected on entry: the slider appears once an item is picked
   const [sel, setSel] = useState<AdjustKey | null>(() => (ADJUST_ITEMS.some((i) => i.key === devAdjust && i.kind === "slide") ? devAdjust as AdjustKey : null));
   const [flash, setFlash] = useState(0);
   const item = ADJUST_ITEMS.find((i) => i.key === sel);
   const wrap = useRef<HTMLDivElement>(null);
-  // CenterScrollLayoutManager: the tapped item smooth-scrolls to the horizontal centre
   const centre = (idx: number) => {
     const list = wrap.current?.firstElementChild as HTMLElement | null;
     const el = list?.children[idx] as HTMLElement | undefined;
@@ -28,10 +28,9 @@ export function AdjustPanel() {
   };
   return (
     <>
-      <ControlRow undo={undo} redo={redo} onOriginal={setOriginal}>
+      <ControlRow undo={undo} onOriginal={setOriginal}>
         {item && (
           <EditSeekBar
-            style={{ marginLeft: 24, marginRight: 24 }}
             value={doc.adjust[item.key as AdjustKey]}
             min={item.min} max={item.max} def={0}
             flashKey={flash}
@@ -40,44 +39,50 @@ export function AdjustPanel() {
           />
         )}
       </ControlRow>
-      <div ref={wrap} className="absolute inset-x-0" style={{ bottom: 52, height: 134 }}>
-        <FeatureList count={ADJUST_ITEMS.length}>
-          {ADJUST_ITEMS.map((it, idx) => {
-            const modified = it.key === "curves" ? curvesModified(doc.curves) : it.key === "hsl" ? hslModified(doc.hsl) : it.key === "split_tone" ? splitModified(doc) : Math.abs(doc.adjust[it.key as AdjustKey]) > 0.0001;
-            return (
-              <FeatureButton
-                key={it.key}
-                icon={it.icon}
-                label={it.label}
-                selected={sel === it.key}
-                modified={modified}
-                onClick={() => {
-                  if (it.kind === "feature") {
-                    setSel(null);
-                    openSub(it.key === "curves" ? "curves" : it.key === "hsl" ? "hsl" : "split");
-                  } else {
-                    setSel(it.key as AdjustKey);
-                    setFlash((n) => n + 1);
-                    centre(idx);
-                  }
-                }}
-              />
-            );
-          })}
-        </FeatureList>
-      </div>
+      <PanelArea>
+        <div ref={wrap} className="absolute inset-0">
+          <FeatureList>
+            {ADJUST_ITEMS.map((it, idx) => {
+              const modified = it.key === "curves" ? curvesModified(doc.curves) : it.key === "hsl" ? hslModified(doc.hsl) : it.key === "split_tone" ? splitModified(doc) : Math.abs(doc.adjust[it.key as AdjustKey]) > 0.0001;
+              return (
+                <div key={it.key} className="flex flex-none items-center">
+                  <FeatureButton
+                    icon={it.icon}
+                    label={it.label}
+                    selected={sel === it.key}
+                    modified={modified}
+                    onClick={() => {
+                      if (it.kind === "feature") {
+                        setSel(null);
+                        openSub(it.key === "curves" ? "curves" : it.key === "hsl" ? "hsl" : "split");
+                      } else {
+                        setSel(it.key as AdjustKey);
+                        setFlash((n) => n + 1);
+                        centre(idx);
+                      }
+                    }}
+                  />
+                  {it.key === "hsl" && <span className="mx-1.5 h-8 w-px flex-none bg-line" />}
+                </div>
+              );
+            })}
+          </FeatureList>
+        </div>
+      </PanelArea>
     </>
   );
 }
 
 /* ================================================================== Curves */
 
+/** Channel colours: line, point and histogram fill. */
 const CH = [
-  { key: "rgb", sel: "#FFFFFF", unsel: "#888888", hist: "rgba(171,171,171,0.2)" },
-  { key: "red", sel: "#FF5151", unsel: "#6B2E2E", hist: "rgba(242,89,104,0.2)" },
-  { key: "green", sel: "#7DD87E", unsel: "#375137", hist: "rgba(93,192,93,0.2)" },
-  { key: "blue", sel: "#3D86FF", unsel: "#213279", hist: "rgba(61,134,255,0.2)" },
+  { key: "rgb", label: "All", line: "#F4F5F7", hist: "rgba(244,245,247,0.16)" },
+  { key: "red", label: "Red", line: "#FF6B6B", hist: "rgba(255,107,107,0.18)" },
+  { key: "green", label: "Green", line: "#4ADE80", hist: "rgba(74,222,128,0.18)" },
+  { key: "blue", label: "Blue", line: "#60A5FA", hist: "rgba(96,165,250,0.18)" },
 ] as const;
+const CURVE_H = 220;
 
 function useHistogram(src: HTMLCanvasElement | null) {
   return useMemo(() => {
@@ -111,7 +116,7 @@ export function CurvesPanel() {
   const apply = (c: Curves) => { setCurves(c); setLive({ ...doc, curves: c }); };
   const push = (c: Curves) => setStack((s) => ({ list: [...s.list.slice(0, s.i + 1), c], i: s.i + 1 }));
 
-  // draw EPCurveView
+  // curve graph: histogram, quarter grid, the identity diagonal, the spline and its points
   useEffect(() => {
     const cv = canvasRef.current;
     if (!cv) return;
@@ -120,43 +125,43 @@ export function CurvesPanel() {
     cv.width = W * dpr; cv.height = H * dpr;
     const g = cv.getContext("2d")!;
     g.scale(dpr, dpr);
-    g.fillStyle = "rgba(0,0,0,0.7)"; g.fillRect(0, 0, W, H);
-    const pad = 20, w = W - pad * 2, h = H - pad * 2;
+    g.clearRect(0, 0, W, H);
+    const pad = 18, w = W - pad * 2, h = H - pad * 2;
     const X = (x: number) => pad + x * w, Y = (y: number) => pad + (1 - y) * h;
     if (hist) {
       g.fillStyle = CH[ch].hist;
       g.beginPath(); g.moveTo(X(0), Y(0));
-      hist[ch].forEach((v, i) => g.lineTo(X(i / 255), Y(v)));
+      hist[ch].forEach((v, i) => g.lineTo(X(i / 255), Y(v * 0.9)));
       g.lineTo(X(1), Y(0)); g.closePath(); g.fill();
     }
-    g.strokeStyle = "rgba(69,69,69,0.8)"; g.lineWidth = 1; g.lineJoin = "round";
+    g.strokeStyle = "rgba(255,255,255,0.1)"; g.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
       g.beginPath(); g.moveTo(X(i / 4), Y(0)); g.lineTo(X(i / 4), Y(1)); g.stroke();
       g.beginPath(); g.moveTo(X(0), Y(i / 4)); g.lineTo(X(1), Y(i / 4)); g.stroke();
     }
+    g.setLineDash([4, 4]);
     g.beginPath(); g.moveTo(X(0), Y(0)); g.lineTo(X(1), Y(1)); g.stroke();
+    g.setLineDash([]);
     const f = splineFn(pts);
-    const path = () => { g.beginPath(); for (let i = 0; i <= 200; i++) { const x = i / 200; const y = Math.min(1, Math.max(0, f(x))); if (i) g.lineTo(X(x), Y(y)); else g.moveTo(X(x), Y(y)); } };
-    g.lineCap = "round";
-    path(); g.strokeStyle = "#000000"; g.lineWidth = 4; g.stroke();
-    path(); g.strokeStyle = CH[ch].sel; g.lineWidth = 2; g.stroke();
+    g.beginPath();
+    for (let i = 0; i <= 200; i++) { const x = i / 200; const y = Math.min(1, Math.max(0, f(x))); if (i) g.lineTo(X(x), Y(y)); else g.moveTo(X(x), Y(y)); }
+    g.lineCap = "round"; g.strokeStyle = CH[ch].line; g.lineWidth = 2.5; g.stroke();
     pts.forEach((p, i) => {
-      g.beginPath(); g.arc(X(p[0]), Y(p[1]), 8.5, 0, Math.PI * 2);
-      g.fillStyle = i === selPt ? CH[ch].sel : CH[ch].unsel; g.fill();
-      g.strokeStyle = "#000"; g.lineWidth = 1; g.stroke();
+      g.beginPath(); g.arc(X(p[0]), Y(p[1]), i === selPt ? 9 : 7, 0, Math.PI * 2);
+      g.fillStyle = i === selPt ? CH[ch].line : "#0B0C0F"; g.fill();
+      g.strokeStyle = CH[ch].line; g.lineWidth = 2; g.stroke();
     });
   }, [pts, ch, selPt, hist]);
 
   const toUnit = (e: React.PointerEvent) => {
     const r = canvasRef.current!.getBoundingClientRect();
-    const pad = 20, w = r.width - pad * 2, h = r.height - pad * 2;
+    const pad = 18, w = r.width - pad * 2, h = r.height - pad * 2;
     return { x: (e.clientX - r.left - pad) / w, y: 1 - (e.clientY - r.top - pad) / h, w };
   };
-
   const onDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     const { x, y, w } = toUnit(e);
-    let idx = pts.findIndex((p) => Math.abs(p[0] - x) * w <= 17);
+    let idx = pts.findIndex((p) => Math.abs(p[0] - x) * w <= 16);
     let next = pts;
     if (idx < 0) {
       const cx = Math.min(1, Math.max(0, x)), cy = Math.min(1, Math.max(0, y));
@@ -172,7 +177,7 @@ export function CurvesPanel() {
     const { x, y, w } = toUnit(e);
     const i = drag.current.idx;
     const cur = curves[key];
-    const minGap = 8.5 / w;
+    const minGap = 8 / w;
     const nx = i === 0 || i === cur.length - 1 ? cur[i][0] : Math.min(cur[i + 1][0] - minGap, Math.max(cur[i - 1][0] + minGap, x));
     const next = cur.map((p, j) => (j === i ? [nx, Math.min(1, Math.max(0, y))] as Pt : p));
     apply({ ...curves, [key]: next });
@@ -180,53 +185,54 @@ export function CurvesPanel() {
   const onUp = () => { if (drag.current) { drag.current = null; push(curves); } };
 
   const canDelete = selPt > 0 && selPt < pts.length - 1;
-  const undoLocal = (dir: -1 | 1) => {
+  const step = (dir: -1 | 1) => {
     const i = stack.i + dir;
     if (i < 0 || i >= stack.list.length) return;
     setStack({ ...stack, i });
     setSelPt(-1);
     apply(stack.list[i]);
   };
+  const channelEdited = (k: (typeof CH)[number]["key"]) => { const c = curves[k]; return !(c.length === 2 && c[0][0] === 0 && c[0][1] === 0 && c[1][0] === 1 && c[1][1] === 1); };
 
   return (
     <>
-      <ControlRow bottom={322} undo={{ can: stack.i > 0, on: () => undoLocal(-1) }} redo={{ can: stack.i < stack.list.length - 1, on: () => undoLocal(1) }} onOriginal={setOriginal} />
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: 186 }} />
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-x-0"
-        style={{ bottom: 112, height: 210, width: "100%", touchAction: "none" }}
-        onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-      />
-      <div className="absolute inset-x-0 flex justify-center" style={{ bottom: 75, gap: 28 }}>
-        {CH.map((c, i) => (
-          <ColorChip key={c.key} color={i === 0 ? "transparent" : c.sel} selected={ch === i} onClick={() => { setCh(i); setSelPt(-1); }}>
-            {i === 0 && <Img name="icon_edit_adjust_curve_rgb" size={ch === 0 ? 24 : 32} style={{ position: "absolute" }} />}
-            {i === 0 && ch === 0 && <span className="absolute inset-0 rounded-full" style={{ border: "2px solid #ffffff" }} />}
-          </ColorChip>
-        ))}
+      <ControlRow bottom={MENU + CURVE_H + 8} undo={{ can: stack.i > 0, on: () => step(-1) }} redo={{ can: stack.i < stack.list.length - 1, on: () => step(1) }} onOriginal={setOriginal} />
+      <div className="absolute inset-x-3 z-20 overflow-hidden rounded-lg bg-bg/75 ring-1 ring-line backdrop-blur-md" style={{ bottom: MENU + 8, height: CURVE_H }}>
+        <canvas ref={canvasRef} className="h-full w-full touch-none" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
       </div>
-      <button
-        type="button"
-        disabled={!canDelete}
-        onClick={() => { const next = pts.filter((_, j) => j !== selPt); const c = { ...curves, [key]: next }; apply(c); push(c); setSelPt(-1); }}
-        className="absolute"
-        style={{ right: 10, bottom: 52 + 44.5, width: 29.5, height: 29.5, opacity: canDelete ? 1 : 0.4 }}
-      >
-        <Img name="icon_edit_curve_delete_enabled" size={29.5} />
-      </button>
-      <TitleBar title="Curves" onClose={() => { setLive(null); openSub(null); }} onConfirm={() => { commit({ ...doc, curves }); openSub(null); }} />
+      <EditBar title="Curves" onClose={() => { setLive(null); openSub(null); }} onConfirm={() => { commit({ ...doc, curves }); openSub(null); }} />
+      <Dock>
+        <div className="flex h-full flex-col justify-center gap-4 px-4">
+          <div className="grid grid-cols-4 gap-2">
+            {CH.map((c, i) => (
+              <button
+                key={c.key} type="button" aria-pressed={ch === i} onClick={() => { setCh(i); setSelPt(-1); }}
+                className={cx("oe-press flex h-12 flex-col items-center justify-center gap-1 rounded-md text-[12px] font-semibold transition-colors", ch === i ? "bg-raised text-fg ring-1 ring-fg/40" : "bg-bg/40 text-fg-3")}
+              >
+                <span className="relative h-2.5 w-6 rounded-full" style={{ background: c.line }}>
+                  {channelEdited(c.key) && <span className="absolute -right-1.5 -top-1 h-1.5 w-1.5 rounded-full bg-accent" />}
+                </span>
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" size="sm" icon="trash" disabled={!canDelete} block onClick={() => { const next = pts.filter((_, j) => j !== selPt); const c = { ...curves, [key]: next }; apply(c); push(c); setSelPt(-1); }}>Delete point</Button>
+            <Button variant="secondary" size="sm" icon="reset" disabled={!channelEdited(key)} block onClick={() => { const c = { ...curves, [key]: DEFAULT_CURVE }; apply(c); push(c); setSelPt(-1); }}>Reset {CH[ch].label === "All" ? "curve" : CH[ch].label.toLowerCase()}</Button>
+          </div>
+          <p className="-mt-1 text-center text-[12px] text-fg-3">Tap the graph to add a point, drag to shape the curve.</p>
+        </div>
+      </Dock>
     </>
   );
 }
 
-/* ================================================================== HSL */
+/* ================================================================== Colour mix (HSL) */
 
 export function HslPanel() {
   const { doc, setLive, commit, openSub, setOriginal } = useEdit();
   const [hsl, setHsl] = useState<number[]>(doc.hsl);
   const [color, setColor] = useState(0);
-  const [dragRow, setDragRow] = useState<number | null>(null);
   const c = HSL_COLORS[color];
   const rows = [
     { label: "Hue", grad: c.hue },
@@ -237,38 +243,35 @@ export function HslPanel() {
     const next = [...hsl]; next[color * 3 + row] = v;
     setHsl(next); setLive({ ...doc, hsl: next });
   };
-  // option area: 3 rows of 43dp + 5.5 / 1 / 1 / 5.5 spacing
-  const optH = 43 * 3 + 5.5 * 2 + 2;
+  const bandEdited = (i: number) => [0, 1, 2].some((r) => Math.abs(hsl[i * 3 + r]) > 0.001);
   return (
     <>
-      <ControlRow bottom={186 + optH} onOriginal={setOriginal} />
-      <div className="absolute inset-x-0" style={{ bottom: 186, height: optH, background: dragRow === null ? "rgba(0,0,0,0.4)" : "transparent" }}>
-        {rows.map((r, i) => {
-          const v = hsl[color * 3 + i];
-          return (
-            <div key={r.label} className="flex items-center" style={{ marginTop: i === 0 ? 5.5 : 1, height: 43, visibility: dragRow === null || dragRow === i ? "visible" : "hidden" }}>
-              <span className="truncate text-white" style={{ width: 80, marginLeft: 20, fontSize: 13, textShadow: "0 0 2px rgba(0,0,0,0.3)" }}>{`${r.label} ${Math.round(v * 100)}`}</span>
-              <EditSeekBar
-                style={{ marginLeft: 24, marginRight: 52 }}
-                value={v} min={-1} max={1} def={0} level={false} gradient={r.grad}
-                onChange={(nv) => { setDragRow(i); set(i, nv); }}
-                onRelease={() => setDragRow(null)}
-              />
-            </div>
-          );
-        })}
-      </div>
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: 186 }}>
-        <div className="absolute inset-x-0 top-0 flex items-center justify-between" style={{ height: 134, padding: "0 21.5px" }}>
-          {HSL_COLORS.map((h, i) => <ColorChip key={h.name} color={h.c} selected={color === i} onClick={() => setColor(i)} />)}
+      <ControlRow onOriginal={setOriginal} />
+      <EditBar title="Colour mix" onClose={() => { setLive(null); openSub(null); }} onConfirm={() => { commit({ ...doc, hsl }); openSub(null); }} />
+      <Dock>
+        <div className="flex h-full flex-col justify-center gap-1 pb-2">
+          <div className="mb-1 flex items-center justify-between px-5">
+            {HSL_COLORS.map((h, i) => (
+              <ColorChip key={h.name} label={h.name} color={h.c} selected={color === i} onClick={() => setColor(i)}>
+                {bandEdited(i) && color !== i && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+              </ColorChip>
+            ))}
+          </div>
+          {rows.map((r, i) => {
+            const v = hsl[color * 3 + i];
+            return (
+              <SliderRow key={r.label} label={r.label} value={Math.round(v * 100)}>
+                <EditSeekBar value={v} min={-1} max={1} def={0} level={false} gradient={r.grad} onChange={(nv) => set(i, nv)} />
+              </SliderRow>
+            );
+          })}
         </div>
-        <TitleBar title="HSL" onClose={() => { setLive(null); openSub(null); }} onConfirm={() => { commit({ ...doc, hsl }); openSub(null); }} />
-      </div>
+      </Dock>
     </>
   );
 }
 
-/* ================================================================== Split Tone */
+/* ================================================================== Split tone */
 
 export function SplitPanel() {
   const { doc, setLive, commit, openSub, setOriginal } = useEdit();
@@ -280,32 +283,36 @@ export function SplitPanel() {
   const modified = !!(split.shadow.color || split.highlight.color);
   return (
     <>
-      <ControlRow onOriginal={modified ? setOriginal : undefined}>
-        <EditSeekBar
-          style={{ marginLeft: 68, marginRight: 24 }}
-          value={cur.color ? cur.value : 0} min={0} max={1} def={cur.color ? 1 : 0}
-          disabled={!cur.color}
-          onChange={(v) => apply({ ...split, [page]: { ...cur, value: v, memo: { ...cur.memo, [cur.color!]: v } } })}
-        />
-        {!modified && <span style={{ width: 44 }} />}
-      </ControlRow>
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: 186 }}>
-        <div className="absolute inset-x-0 top-0 flex items-center justify-between" style={{ height: 134, padding: "0 22px" }}>
-          {colors.map((c) => (
-            <ColorChip
-              key={c} color={c} selected={cur.color === c}
-              onClick={() => {
-                if (cur.color === c) apply({ ...split, [page]: { ...cur, color: null, value: 0 } });
-                else apply({ ...split, [page]: { ...cur, color: c, value: cur.memo[c] ?? 1 } });
-              }}
+      <ControlRow onOriginal={modified ? setOriginal : undefined} />
+      <EditBar onClose={() => { setLive(null); openSub(null); }} onConfirm={() => { commit({ ...doc, split }); openSub(null); }}>
+        <BarTabs items={[{ id: "shadow", label: "Shadows" }, { id: "highlight", label: "Highlights" }]} value={page} onChange={setPage} />
+      </EditBar>
+      <Dock>
+        <div className="flex h-full flex-col justify-center gap-5 pb-2">
+          <div className="flex items-center justify-between px-5">
+            <button
+              type="button" aria-label="No tint" aria-pressed={!cur.color}
+              onClick={() => apply({ ...split, [page]: { ...cur, color: null, value: 0 } })}
+              className={cx("oe-press flex h-[30px] w-[30px] items-center justify-center rounded-full", !cur.color ? "bg-fg text-bg" : "bg-raised text-fg-2")}
+            >
+              <Icon name="block" size={16} />
+            </button>
+            {colors.map((c) => (
+              <ColorChip
+                key={c} color={c} selected={cur.color === c}
+                onClick={() => apply({ ...split, [page]: { ...cur, color: c, value: cur.memo[c] ?? 1 } })}
+              />
+            ))}
+          </div>
+          <SliderRow label="Strength" value={cur.color ? Math.round(cur.value * 100) : "–"}>
+            <EditSeekBar
+              value={cur.color ? cur.value : 0} min={0} max={1} def={cur.color ? 1 : 0} level={false}
+              disabled={!cur.color}
+              onChange={(v) => apply({ ...split, [page]: { ...cur, value: v, memo: { ...cur.memo, [cur.color!]: v } } })}
             />
-          ))}
+          </SliderRow>
         </div>
-        <TitleBar onClose={() => { setLive(null); openSub(null); }} onConfirm={() => { commit({ ...doc, split }); openSub(null); }}>
-          <TitleTab label="Shadows" selected={page === "shadow"} onClick={() => setPage("shadow")} style={{ padding: "10px 30px" }} />
-          <TitleTab label="Highlights" selected={page === "highlight"} onClick={() => setPage("highlight")} style={{ padding: "10px 30px" }} />
-        </TitleBar>
-      </div>
+      </Dock>
     </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-// Router for the Tools / Portrait two-depth pages owned by the edit-tools part (sub ids "x:<page>").
+// Router for the Tools and Portrait tool pages (sub ids "x:<page>").
 import { CutoutTool } from "./Cutout";
 import { DslrTool } from "./Dslr";
 import { EnhanceTool } from "./Enhance";
@@ -9,12 +9,12 @@ import { MosaicTool } from "./Mosaic";
 import { RemoveTool } from "./Remove";
 import { ManualSkinPage, PaintPage } from "./portrait/Brushes";
 import { EyeLightPage, FacePage, IconListPage, MakeupPage, VolumePage } from "./portrait/FaceTools";
-import { AiHairPage, HairColorPage, HdSkinPage } from "./AiPortrait";
+import { HairColorPage, HdSkinPage } from "./AiPortrait";
 import { LiquifyPage } from "./portrait/Liquify";
 
 export type ExtPage =
   | "remove" | "generativefill" | "mosaic" | "enhance" | "dslr" | "cutout"
-  | "RESHAPE" | "FACE_RATIO" | "RESHAPE3D" | "RETOUCH" | "MAKEUP" | "HDSKIN" | "SKIN_RETOUCH" | "BODY" | "PAINT" | "EYELIGHT" | "HAIRCOLOR" | "HAIRVOLUME" | "AI_HAIR";
+  | "RESHAPE" | "FACE_RATIO" | "RESHAPE3D" | "RETOUCH" | "MAKEUP" | "HDSKIN" | "SKIN_RETOUCH" | "BODY" | "PAINT" | "EYELIGHT" | "HAIRCOLOR" | "HAIRVOLUME";
 
 export const isExtSub = (s: unknown): s is `x:${string}` => typeof s === "string" && s.startsWith("x:");
 
@@ -37,7 +37,6 @@ export function ExtSub({ sub }: { sub: string }) {
     case "EYELIGHT": return <EyeLightPage />;
     case "HAIRCOLOR": return <HairColorPage />;
     case "HAIRVOLUME": return <VolumePage />;
-    case "AI_HAIR": return <AiHairPage />;
     default: return null;
   }
 }

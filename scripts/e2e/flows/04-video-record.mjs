@@ -1,41 +1,40 @@
-import { openCamera, hasImg } from "../h.mjs";
-const confirmUp = `!!document.querySelector('[aria-label=save]')`;
+import { openCamera, reviewUp } from "../h.mjs";
 export default async function flowVideoRecord(s) {
   await openCamera(s, { fresh: true });
   await s.step("video-mode", async () => {
-    await s.click("VIDEO", { settle: 1000 });
-    await s.waitVisible("Duration", { timeout: 3000 });
+    await s.click("Video", { settle: 1000 });
+    await s.waitVisible({ label: "Record video" }, { timeout: 3000 });
   });
   await s.step("record-clip", async () => {
-    await s.click({ label: "shutter" }, { settle: 2600 });
+    await s.click({ label: "Record video" }, { settle: 2600 });
     await s.waitFor(`/\\d\\d:\\d\\d/.test(document.body.innerText)`, { timeout: 4000, msg: "recording time" });
-    // recording time must be readable: black over the white top bar (9:16 on a long screen)
-    await s.assert(`(() => { const el = [...document.querySelectorAll('span')].find(e => /^\\d\\d:\\d\\d$/.test(e.innerText)); return el && getComputedStyle(el).color === 'rgb(0, 0, 0)'; })()`, "recording time is black on the white top bar");
-    await s.click({ label: "shutter" }, { settle: 900 }); // pause
+    await s.click({ label: "Stop recording" }, { settle: 900 });
   });
-  await s.step("second-clip-undo", async () => {
-    await s.click({ label: "shutter" }, { settle: 1500 });
-    await s.click({ label: "shutter" }, { settle: 900 });
+  await s.step("second-clip", async () => {
+    if (await s.exists({ label: "Record video" })) {
+      await s.click({ label: "Record video" }, { settle: 1500 });
+      await s.click({ label: "Stop recording" }, { settle: 900 });
+    }
   });
-  await s.step("next-confirm", async () => {
-    await s.waitVisible({ label: "undo" }, { timeout: 3000 });
-    await s.click({ label: "next" }, { settle: 300 });
-    await s.waitFor(confirmUp, { timeout: 15000, msg: "video confirm" });
-    await s.waitFor(`[...document.querySelectorAll('video')].some(v => v.readyState >= 2 && v.duration > 0.5)`, { timeout: 10000, msg: "confirm video playable" });
+  await s.step("next-review", async () => {
+    await s.waitVisible({ label: "Undo last clip" }, { timeout: 3000 });
+    await s.click({ label: "Finish video" }, { settle: 300 });
+    await s.waitFor(reviewUp, { timeout: 15000, msg: "video review" });
+    await s.waitFor(`[...document.querySelectorAll('video')].some(v => v.readyState >= 2 && v.duration > 0.5)`, { timeout: 10000, msg: "review video playable" });
   });
   await s.step("video-save", async () => {
-    // the two clips are merged in real time first; the save button is disabled until the file exists
-    await s.waitFor(`document.querySelector('[aria-label=save]') && !document.querySelector('[aria-label=save]').disabled`, { timeout: 20000, msg: "merged file ready" });
-    await s.click({ label: "save" }, { settle: 300 });
-    await s.waitFor(`${hasImg("end_story_save_confirm")}`, { timeout: 20000, msg: "video saved" });
+    // clips are merged first; Save is disabled until the file exists
+    await s.waitFor(`document.querySelector('[aria-label="Save to gallery"]') && !document.querySelector('[aria-label="Save to gallery"]').disabled`, { timeout: 20000, msg: "merged file ready" });
+    await s.click({ label: "Save to gallery" }, { settle: 300 });
+    await s.waitFor(`document.body.innerText.includes('Saved') || document.querySelector('[aria-label="Save to gallery"]')?.disabled`, { timeout: 20000, msg: "video saved" });
     await s.sleep(800);
   });
-  await s.step("video-edit-pill", async () => {
+  await s.step("video-edit", async () => {
     await s.click("Edit", { settle: 3000 });
     await s.waitFor(`location.pathname === '/video-edit' || location.pathname === '/edit'`, { timeout: 15000, msg: "video editor route" });
   });
   await s.step("back-to-camera", async () => {
     await s.goto("/"); await openCamera(s);
-    await s.click("NORMAL", { settle: 800 }).catch(() => {});
+    await s.click("Photo", { settle: 800 }).catch(() => {});
   });
 }

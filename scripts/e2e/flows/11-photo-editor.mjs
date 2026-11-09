@@ -1,5 +1,4 @@
-import { SCRATCH } from "../lib.mjs";
-import { importToGallery, nthThumb, editorMain, previewStats, previewThumb, diff } from "../h.mjs";
+import { TEST_PHOTO, importToGallery, nthThumb, editorMain, previewStats, previewThumb, diff } from "../h.mjs";
 
 async function backToMain(s) {
   for (let i = 0; i < 5 && !(await s.ev(editorMain)); i++) {
@@ -38,7 +37,7 @@ async function tapItem(s, label) {
 export default async function flowPhotoEditor(s) {
   await s.step("open-editor", async () => {
     await s.goto("/gallery", { settle: 1500 });
-    await importToGallery(s, [SCRATCH + "/user.jpg"]);
+    await importToGallery(s, [TEST_PHOTO]);
     await s.tapAt(...(await s.ev(nthThumb(0)))); await s.sleep(3000);
     await s.waitFor(`location.pathname === '/edit'`, { timeout: 8000 });
     await s.waitFor(editorMain, { timeout: 10000, msg: "editor tabs" });
@@ -109,7 +108,7 @@ export default async function flowPhotoEditor(s) {
   await s.step("text-add", async () => {
     await backToMain(s); await openTab(s, "Text");
     await s.waitVisible("Done", { timeout: 4000 });
-    await s.type("Hello B612");
+    await s.type("Hello Open_Edit");
     await s.click("Done", { settle: 1500 });
     await s.click({ label: "Confirm" }, { settle: 1200 }).catch(() => {});
     await backToMain(s);

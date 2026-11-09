@@ -1,210 +1,107 @@
 "use client";
 
-// Shared video-editor widgets: VideoSpeedSeekBar (canvas port), PercentProgressDialogFragment,
-// VideoSaveResultDialogFragment, VideoEditLoadingFragment, the effect/sticker network-error block.
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { d } from "@/components/ui/legacy-drawable";
-import { PRIMARY, STR, progressToSpeed, speedLabel, speedToProgress } from "./model";
+// Video editor widgets: the speed slider, the progress card used while saving or reversing, the loading layer and
+// the playback row of the face pages.
+import { useRef, useState, type CSSProperties } from "react";
+import { Button, Icon, Spinner, cx } from "@/components/ui";
+import { EditSeekBar } from "@/components/edit/ui";
+import { ProgressRing } from "@/components/edit/tools/common";
+import { fmtDuration, progressToSpeed, speedLabel, speedToProgress } from "./model";
 
-export { Tint, Img } from "@/components/edit/ui";
+/* ------------------------------------------------------------------ speed slider */
 
-const SHADOW = "2px 2px 2px rgba(0,0,0,0.4)"; // shadowColor #66000000, dx/dy 2, radius 2
-
-/* ------------------------------------------------------------------ VideoSpeedSeekBar */
-
-// CustomSeekBar metrics (custom_seek_bar_thumb_offset 12, thumb r 9.5, shadow 2, track 2, text 12sp, margin 6)
-const OFF = 12, R = 9.5, SH = 2, TRACK = 2, TXT = 12, TM = 6;
-const TICK_W = 1.5, TICK_H = 12.5; // f50948Y0 / f50949Z0
-export const SPEED_BAR_H = Math.floor(R * 2 + SH * 2 + 9 + 1.25 * 2 + TM);
+const MARKS = [0.25, 0.5, 1, 2, 4];
 
 /**
- * VideoSpeedSeekBar (max 4, default 2 = 1x): #4cffffff segments between the five tick marks (0.25 / 0.6 / 1 / 2.5 / 4x),
- * ticks white when inside the 1x→thumb range, white thumb, "<speed>x" above the thumb, magnet onto the ticks (1%).
+ * Speed slider from 0.25x to 4x with 1x in the middle. The fill runs from 1x to the thumb; it snaps to the marked
+ * speeds and keeps the edited length between 1 s and 5 min.
  */
 export function SpeedSeekBar({ speed, onChange, onCommit, durationMs, style }: {
   speed: number; onChange: (s: number) => void; onCommit: (s: number) => void; durationMs: number; style?: CSSProperties;
 }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  const [w, setW] = useState(0);
-  const H = SPEED_BAR_H;
-  const ticks = [0.25, Math.floor(((0.25 + 1) / 2) * 10) / 10, 1, (1 + 4) / 2, 4].map(speedToProgress);
-  const prog = speedToProgress(speed);
+  const ref = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState(false);
   const latest = useRef(speed);
-  useLayoutEffect(() => { latest.current = speed; });
-  useEffect(() => {
-    const c = ref.current!;
-    const ro = new ResizeObserver(() => setW(c.clientWidth));
-    ro.observe(c);
-    return () => ro.disconnect();
-  }, []);
-  useEffect(() => {
-    const c = ref.current;
-    if (!c || !w) return;
-    const dpr = window.devicePixelRatio || 1;
-    c.width = Math.round(w * dpr); c.height = Math.round(H * dpr);
-    const g = c.getContext("2d")!;
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, w, H);
-    const x = (p: number) => ((w - OFF * 2) * p) / 4 + OFF;
-    const cy = H - SH - R;
-    // segments between ticks
-    g.fillStyle = "rgba(255,255,255,0.3)";
-    for (let i = 0; i < ticks.length - 1; i++) g.fillRect(x(ticks[i]) + TICK_W / 2, cy - TRACK / 2, x(ticks[i + 1]) - x(ticks[i]) - TICK_W, TRACK);
-    // active part (1x → thumb)
-    g.fillStyle = "#ffffff";
-    const a = Math.min(x(2), x(prog)), b = Math.max(x(2), x(prog));
-    g.fillRect(a, cy - TRACK / 2, b - a, TRACK);
-    // ticks
-    for (const t of ticks) {
-      const on = prog < 2 ? t <= 2 && prog <= t : prog > 2 ? t >= 2 && prog >= t : false;
-      g.fillStyle = on ? "#ffffff" : "rgba(255,255,255,0.3)";
-      g.fillRect(x(t) - TICK_W / 2, cy - TICK_H / 2, TICK_W, TICK_H);
-    }
-    // thumb
-    g.shadowBlur = 2; g.shadowColor = "rgba(0,0,0,0.2)";
-    g.fillStyle = "#ffffff";
-    g.beginPath(); g.arc(x(prog), cy, R, 0, Math.PI * 2); g.fill();
-    // label
-    g.shadowBlur = 1.25; g.shadowColor = "rgba(0,0,0,0.3)";
-    g.font = `${TXT}px Roboto, system-ui, sans-serif`;
-    const s = speedLabel(progressToSpeed(prog));
-    const m = g.measureText(s);
-    g.fillText(s, Math.max(0, x(prog) - m.width / 2), H - SH * 2 - R * 2 - TM);
-  }, [w, H, prog, ticks]);
-
+  const ticks = MARKS.map(speedToProgress);
+  const p = speedToProgress(speed) / 4;
   const pick = (clientX: number) => {
     const r = ref.current!.getBoundingClientRect();
-    let p = Math.min(4, Math.max(0, ((clientX - r.left - OFF) / (r.width - OFF * 2)) * 4));
-    for (const t of ticks) if (Math.abs(p - t) <= 0.04) p = t; // mo62253k magnet (1% of max)
-    let s = progressToSpeed(p);
-    // mo62247F: keep the edited duration within 1 s .. 5 min
+    let q = Math.min(4, Math.max(0, ((clientX - r.left) / r.width) * 4));
+    for (const t of ticks) if (Math.abs(q - t) <= 0.06) q = t;
+    let s = progressToSpeed(q);
     const out = durationMs / s;
     if (out < 1000) s = progressToSpeed(speedToProgress(durationMs / 1000));
     if (out > 300000) s = progressToSpeed(speedToProgress(durationMs / 300000));
     return s;
   };
-  const active = useRef(false);
+  const a = Math.min(0.5, p), b = Math.max(0.5, p);
   return (
-    <canvas
-      ref={ref}
-      className="block touch-none"
-      style={{ width: "100%", height: H, ...style }}
-      onPointerDown={(e) => { active.current = true; e.currentTarget.setPointerCapture(e.pointerId); const s = pick(e.clientX); latest.current = s; onChange(s); }}
-      onPointerMove={(e) => { if (!active.current) return; const s = pick(e.clientX); latest.current = s; onChange(s); }}
-      onPointerUp={() => { if (!active.current) return; active.current = false; onCommit(latest.current); }}
-      onPointerCancel={() => { if (!active.current) return; active.current = false; onCommit(latest.current); }}
-    />
-  );
-}
-
-/* ------------------------------------------------------------------ dialogs */
-
-/** Guidelines shared by dialog_percent_progress / fragment_video_save_result_dialog: top 50dp, bottom 75%. */
-function Guided({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="absolute inset-x-0 flex items-center justify-center" style={{ top: 50, height: "calc(75% - 50px)" }}>
-      {children}
+    <div style={style}>
+      <div
+        ref={ref}
+        role="slider" aria-label="Speed" aria-valuemin={0.25} aria-valuemax={4} aria-valuenow={speed} tabIndex={0}
+        className="relative h-11 cursor-pointer touch-none"
+        onPointerDown={(e) => { setDrag(true); e.currentTarget.setPointerCapture(e.pointerId); const s = pick(e.clientX); latest.current = s; onChange(s); }}
+        onPointerMove={(e) => { if (!drag) return; const s = pick(e.clientX); latest.current = s; onChange(s); }}
+        onPointerUp={() => { if (!drag) return; setDrag(false); onCommit(latest.current); }}
+        onPointerCancel={() => { if (!drag) return; setDrag(false); onCommit(latest.current); }}
+      >
+        <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-muted">
+          <div className="absolute inset-y-0 rounded-full bg-accent" style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%` }} />
+        </div>
+        {ticks.map((t) => (
+          <span key={t} className={cx("absolute top-1/2 h-3 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full", t / 4 >= a && t / 4 <= b ? "bg-accent" : "bg-fg-3")} style={{ left: `${(t / 4) * 100}%` }} />
+        ))}
+        <span className={cx("absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.5)]", drag && "ring-4 ring-accent/35")} style={{ left: `${p * 100}%` }} />
+      </div>
+      <div className="relative mt-1 h-4">
+        {MARKS.map((m) => (
+          <span key={m} className="tabular absolute -translate-x-1/2 text-[11px] font-medium text-fg-3" style={{ left: `${(speedToProgress(m) / 4) * 100}%` }}>{speedLabel(m)}</span>
+        ))}
+      </div>
     </div>
   );
 }
 
-/** PercentProgressView: 70dp, 4dp stroke, white_20 ring + white arc from 12 o'clock, percent text 15dp. */
-function PercentRing({ value }: { value: number }) {
-  const r = 33, c = 2 * Math.PI * r;
-  return (
-    <div className="relative" style={{ width: 70, height: 70 }}>
-      <svg width={70} height={70} viewBox="0 0 70 70" className="absolute inset-0">
-        <circle cx={35} cy={35} r={r} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth={4} />
-        <circle cx={35} cy={35} r={r} fill="none" stroke="#ffffff" strokeWidth={4} strokeDasharray={`${c * value} ${c}`} transform="rotate(-90 35 35)" />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-white" style={{ fontSize: 15 }}>{Math.round(value * 100)}%</span>
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ progress, loading */
 
-/** PercentProgressDialogFragment (dialog_percent_progress.xml): 200x200 #99000000 r16 box. */
+/** Blocking progress card (saving, exporting, reversing) with an optional Cancel. */
 export function PercentDialog({ value, title, sub, onCancel }: { value: number; title: string; sub?: string; onCancel?: () => void }) {
   return (
-    <div className="absolute inset-0 z-[90]" onPointerDown={(e) => e.stopPropagation()}>
-      <Guided>
-        <div className="relative flex flex-col items-center justify-center" style={{ width: 200, height: 200, borderRadius: 16, background: "rgba(0,0,0,0.6)" }}>
-          <PercentRing value={value} />
-          <span className="text-center text-white" style={{ marginTop: 10, padding: "0 20px", fontSize: 14 }}>{title}</span>
-          {sub && <span className="text-center" style={{ marginTop: 8, padding: "0 20px", fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{sub}</span>}
-          {onCancel && (
-            <button type="button" onClick={onCancel} aria-label="Cancel" className="absolute right-0 top-0" style={{ width: 40, height: 40 }}>
-              <img src={d("icon_video_popup_close")} alt="" style={{ width: 40, height: 40 }} draggable={false} />
-            </button>
-          )}
-        </div>
-      </Guided>
+    <div className="absolute inset-0 z-[90] flex items-center justify-center bg-scrim/50 px-10" onPointerDown={(e) => e.stopPropagation()}>
+      <div className="flex w-full max-w-[260px] flex-col items-center gap-3 rounded-lg bg-panel px-5 pb-4 pt-5 text-center shadow-2xl ring-1 ring-line" style={{ animation: "oe-pop 200ms var(--oe-ease)" }}>
+        <ProgressRing value={value * 100} />
+        <p className="text-[15px] font-semibold">{title}</p>
+        {sub && <p className="-mt-1.5 text-[12px] leading-snug text-fg-3">{sub}</p>}
+        {onCancel && <Button variant="secondary" size="sm" block onClick={onCancel}>Cancel</Button>}
+      </div>
     </div>
   );
 }
 
-/** VideoSaveResultDialogFragment: success = edit_save_confirm on button_black_r8, fail = common_toast_vector text; 3 s. */
-export function SaveResult({ ok, text = STR.saveFail }: { ok: boolean; text?: string }) {
-  return (
-    <div className="absolute inset-0 z-[90]">
-      <Guided>
-        {ok ? (
-          <div style={{ borderRadius: 8, background: "rgba(0,0,0,0.6)" }}>
-            <img src={d("edit_save_confirm")} alt="" style={{ width: 57, height: 57, display: "block" }} draggable={false} />
-          </div>
-        ) : (
-          <div className="text-center text-white" style={{ margin: "0 80px", maxWidth: 250, padding: 20, fontSize: 14, lineHeight: "23px", borderRadius: 8, background: "rgba(0,0,0,0.8)" }}>{text}</div>
-        )}
-      </Guided>
-    </div>
-  );
-}
-
-/** VideoEditLoadingFragment: common_black_30 dim, 97dp depth_loading_bg, 57dp `loading` tinted common_primary. */
+/** Full-screen loading layer while the video opens. */
 export function LoadingLayer() {
   return (
-    <div className="absolute inset-0 z-[90] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.3)" }} onPointerDown={(e) => e.stopPropagation()}>
-      <div className="flex items-center justify-center" style={{ width: 97, height: 97, borderRadius: 8, background: "rgba(0,0,0,0.5)" }}>
-        <span
-          style={{
-            width: 57, height: 57, background: PRIMARY, WebkitMaskImage: `url(${d("loading")})`, maskImage: `url(${d("loading")})`,
-            WebkitMaskSize: "contain", maskSize: "contain", animation: "ve-spin 1s linear infinite",
-          }}
-        />
+    <div className="absolute inset-0 z-[90] flex items-center justify-center bg-bg/60" onPointerDown={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-3 rounded-lg bg-panel px-5 py-4 shadow-2xl ring-1 ring-line">
+        <Spinner size={22} className="text-accent" />
+        <span className="text-[15px] font-medium">Opening video…</span>
       </div>
-      <style>{"@keyframes ve-spin { to { transform: rotate(360deg) } }"}</style>
     </div>
   );
 }
 
-/** network_error / network_error_layout: "Not connected to network." + gallery_edit_frame_error "Retry". */
-export function NetworkError({ onRetry, style }: { onRetry: () => void; style?: CSSProperties }) {
+/** Play / pause, a position slider and the time, for the face pages. */
+export function PlayRow({ playing, pos, start, end, onToggle, onSeek, className, style }: {
+  playing: boolean; pos: number; start: number; end: number; onToggle: () => void; onSeek: (ms: number) => void; className?: string; style?: CSSProperties;
+}) {
   return (
-    <div className="absolute inset-x-0 flex flex-col items-center" style={style}>
-      <span className="text-center text-white" style={{ fontSize: 12, textShadow: SHADOW }}>{STR.networkBar}</span>
-      <button type="button" onClick={onRetry} className="flex items-center text-white" style={{ marginTop: 8, fontSize: 14, textShadow: SHADOW }}>
-        <span style={{ width: 15, height: 15, marginRight: 3, background: "#ffffff", WebkitMaskImage: `url(${d("gallery_edit_frame_error")})`, maskImage: `url(${d("gallery_edit_frame_error")})`, WebkitMaskSize: "contain", maskSize: "contain" }} />
-        {STR.retry}
+    <div className={cx("flex items-center gap-3 px-4", className)} style={style}>
+      <button type="button" onClick={onToggle} aria-label={playing ? "Pause" : "Play"} className="oe-press flex h-9 w-9 flex-none items-center justify-center rounded-full bg-raised">
+        <Icon name={playing ? "pause" : "play"} size={17} filled />
       </button>
-    </div>
-  );
-}
-
-/** edit_brush_loading spinner (progress_bar). */
-export function Spinner({ size = 24 }: { size?: number }) {
-  return <img src={d("edit_brush_loading")} alt="" style={{ width: size, height: size, animation: "ve-spin 1s linear infinite" }} draggable={false} />;
-}
-
-/** Toast (common_toast_vector) centered, 2 s. */
-export function useToast(): [string | null, (t: string) => void] {
-  const [t, setT] = useState<string | null>(null);
-  const timer = useRef<number | undefined>(undefined);
-  return [t, (s: string) => { setT(s); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setT(null), 2000); }];
-}
-export function Toast({ text }: { text: string | null }) {
-  if (!text) return null;
-  return (
-    <div className="pointer-events-none absolute inset-0 z-[95] flex items-center justify-center">
-      <div className="text-center text-white" style={{ maxWidth: 250, padding: "12px 20px", fontSize: 14, borderRadius: 8, background: "rgba(0,0,0,0.8)", whiteSpace: "pre-line" }}>{text}</div>
+      <EditSeekBar value={pos} min={start} max={Math.max(end, start + 1)} def={start} level={false} duplex={false} onChange={onSeek} />
+      <span className="tabular w-10 flex-none text-right text-[12px] text-fg-3">{fmtDuration(pos - start)}</span>
     </div>
   );
 }

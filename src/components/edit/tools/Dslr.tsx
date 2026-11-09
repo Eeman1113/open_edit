@@ -1,17 +1,16 @@
 "use client";
 
-// EPDslrFragment (fragment_edit_photo_tools_dslr.xml). The original downloads Kuru effect package 139383 and
-// a server depth map; the web port computes the depth map on-device with Depth Anything V2 Small (src/lib/ai,
-// Apache-2.0) and renders a depth-aware lens blur driven by the same four controls and the focus tap.
+// Depth blur: an on-device depth map (Depth Anything V2 Small, src/lib/ai, Apache-2.0) drives a depth-aware lens blur.
+// Tap the photo to choose what stays sharp; Aperture, Focus range, Depth and Soft edges shape the blur.
 import { useEffect, useRef, useState } from "react";
 import { bokeh, depthAt, depthMap, type DepthMap } from "@/lib/ai";
 import { useEdit } from "../ctx";
-import { CtrlIcon, EditSeekBar, FeatureButton, FeatureList } from "../ui";
-import { clamp, copyCanvas, EditLoading, MENU, OptionRow, Panel, PhotoOverlay, RetryView, S, useHold, usePhotoArea, usePhotoSnapshot } from "./common";
+import { ControlRow, EditSeekBar, FeatureButton, FeatureList } from "../ui";
+import { clamp, copyCanvas, EditLoading, MENU, OPTION_H, OptionRow, Panel, PhotoOverlay, RetryView, S, useHold, usePhotoArea, usePhotoSnapshot } from "./common";
 import { F_STOPS, indexToStrength, strengthToIndex, type DslrParams } from "./effects";
 import { useAsyncBake, useBase } from "./aiCommon";
 
-/** Blur radius in px for an image of size W x H (same scale as the original f-stop ruler mapping). */
+/** Blur radius in px for an image of size W x H, from the aperture ruler position. */
 const maxRadius = (p: DslrParams, W: number, H: number) => (strengthToIndex(p.strength) / 34) * Math.min(W, H) * 0.03;
 
 /** Depth refined at <= `long` px, then bilinearly resampled to W x H. */
@@ -33,46 +32,42 @@ function depthFor(dm: DepthMap, src: HTMLCanvasElement, long = 1600) {
 }
 
 const MENUS = [
-  { key: "strength", label: "Strength", icon: "icon_edit_dslr_strength", def: 0.6 },
-  { key: "focus", label: "Focus", icon: "icon_edit_dslr_focus", def: 0.9 },
-  { key: "depth", label: "Depth", icon: "icon_edit_dslr_depth", def: 0.8 },
-  { key: "edges", label: "Blur Edges", icon: "icon_edit_dslr_bluredges", def: 0 },
+  { key: "strength", label: "Aperture", icon: "depth", def: 0.6 },
+  { key: "focus", label: "Focus range", icon: "focus", def: 0.9 },
+  { key: "depth", label: "Depth", icon: "skew-v", def: 0.8 },
+  { key: "edges", label: "Soft edges", icon: "fade", def: 0 },
 ] as const;
 type Key = (typeof MENUS)[number]["key"];
 
 const fLabel = (v: number) => `f/${Math.round(F_STOPS[Math.round(clamp(strengthToIndex(v), 0, 34))] * 10) / 10}`;
 
-/** VCStrengthBar: aperture ruler, 35 ticks (16x2dp, 10dp gap) sliding under a fixed #FF6584 cursor. */
+/** Aperture ruler: 35 f-stop ticks slide under a fixed centre marker; drag sideways to change. */
 function StrengthBar({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x0: number; i0: number } | null>(null);
-  const [bubble, setBubble] = useState(false);
   const idx = strengthToIndex(value);
-  const GAP = 12; // 2dp tick + 10dp gap
+  const GAP = 12;
   const set = (i: number) => {
     const ii = Math.round(clamp(i, 0, 34));
     if (Math.abs(indexToStrength(ii) - value) > 1e-6) onChange(Math.max(0.01, indexToStrength(ii)));
   };
   return (
-    <div
-      ref={ref} className="relative h-full flex-1 overflow-hidden" style={{ touchAction: "none" }}
-      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x0: e.clientX, i0: idx }; setBubble(true); }}
-      onPointerMove={(e) => { const dg = drag.current; if (dg) set(dg.i0 - (e.clientX - dg.x0) / GAP); }}
-      onPointerUp={() => { drag.current = null; window.setTimeout(() => setBubble(false), 500); }}
-    >
-      <div className="absolute inset-y-0 left-1/2" style={{ transform: `translateX(${-idx * GAP}px)` }}>
-        {F_STOPS.map((f, i) => (
-          <span key={i} className="absolute" style={{ left: i * GAP - 1, top: "50%", marginTop: -8, width: 2, height: 16, borderRadius: 1, background: [0, 6, 11, 21, 31, 34].includes(i) ? "#ffffff" : "rgba(255,255,255,0.3)" }} />
-        ))}
-        <span className="absolute rounded-full bg-white" style={{ left: 21 * GAP - 2, top: "50%", marginTop: 12, width: 4, height: 4 }} />
-      </div>
-      <span className="absolute left-1/2 top-1/2" style={{ width: 2, height: 26, marginLeft: -1, marginTop: -13, background: "#FF6584" }} />
-      <span
-        className="pointer-events-none absolute left-1/2 flex items-center justify-center rounded-full bg-white font-bold"
-        style={{ width: 42, height: 42, marginLeft: -21, bottom: 34, fontSize: 11, color: "#222222", boxShadow: "0 0 2px rgba(0,0,0,0.3)", opacity: bubble ? 1 : 0, transition: bubble ? "none" : "opacity 300ms" }}
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div
+        className="relative h-10 min-w-0 flex-1 cursor-ew-resize touch-none overflow-hidden"
+        style={{ maskImage: "linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent)" }}
+        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x0: e.clientX, i0: idx }; }}
+        onPointerMove={(e) => { const dg = drag.current; if (dg) set(dg.i0 - (e.clientX - dg.x0) / GAP); }}
+        onPointerUp={() => { drag.current = null; }}
       >
-        {fLabel(value)}
-      </span>
+        <div className="absolute inset-y-0 left-1/2" style={{ transform: `translateX(${-idx * GAP}px)` }}>
+          {F_STOPS.map((_, i) => {
+            const major = [0, 6, 11, 21, 31, 34].includes(i);
+            return <span key={i} className="absolute top-1/2 w-[2px] -translate-y-1/2 rounded-full" style={{ left: i * GAP - 1, height: major ? 18 : 10, background: major ? "var(--oe-fg)" : "var(--oe-fg3)" }} />;
+          })}
+        </div>
+        <span className="absolute left-1/2 top-1/2 h-7 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent" />
+      </div>
+      <span className="tabular w-12 flex-none text-right font-display text-[15px] font-semibold">{fLabel(value)}</span>
     </div>
   );
 }
@@ -96,7 +91,7 @@ export function DslrTool() {
   const [p, setP] = useState<DslrParams>({ strength: 0.6, focus: 0.9, depth: 0.8, edges: 0, fx: 0.5, fy: 0.45 });
   const [focusAt, setFocusAt] = useState<{ x: number; y: number } | null>(null);
 
-  // depth model download + inference (view_loading "Processing…"), then Strength is auto-selected
+  // depth model download and inference, then Aperture is selected
   useEffect(() => {
     const base = getBase();
     if (!snap || !base) return;
@@ -151,36 +146,35 @@ export function DslrTool() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const optionH = sel ? 54 : 0;
+  const optionH = sel ? OPTION_H : 0;
   return (
     <>
       <PhotoOverlay area={area} canvasRef={canvasRef} hidden={held || !ready}>
         {focusAt && sel === "focus" && (
-          <span className="absolute rounded-full" style={{ left: focusAt.x - 30, top: focusAt.y - 30, width: 60, height: 60, border: "1.5px solid #ffffff" }} />
+          <span className="absolute rounded-full ring-2 ring-accent" style={{ left: focusAt.x - 30, top: focusAt.y - 30, width: 60, height: 60, boxShadow: "0 0 0 1px rgba(0,0,0,0.3)" }} />
         )}
       </PhotoOverlay>
-      {((!ready && !failed) || baking) && <EditLoading text={S.processing} />}
+      {((!ready && !failed) || baking) && <EditLoading text={baking ? "Rendering full size…" : "Measuring depth…"} />}
       {failed && <RetryView text={S.networkTry} onRetry={() => { setFailed(false); setAttempt((n) => n + 1); }} />}
-
-      <div className="absolute inset-x-0 z-20 flex items-center" style={{ bottom: MENU + optionH, height: 54 }} onPointerDown={(e) => e.stopPropagation()}>
-        <span className="flex-1" />
-        <CtrlIcon name="original" enabled={ready} onHold={hold} style={{ marginRight: 10 }} />
-      </div>
-      {sel === "strength" && (
-        <OptionRow bottom={MENU}><div className="flex h-full flex-1 items-center" style={{ padding: "10px 0" }}><StrengthBar value={p.strength} onChange={(v) => setP((o) => ({ ...o, strength: v }))} /></div></OptionRow>
-      )}
+      <ControlRow bottom={MENU + optionH} onOriginal={hold} originalEnabled={ready} />
+      {sel === "strength" && <OptionRow bottom={MENU} label="Aperture"><StrengthBar value={p.strength} onChange={(v) => setP((o) => ({ ...o, strength: v }))} /></OptionRow>}
       {sel && sel !== "strength" && (
-        <OptionRow bottom={MENU}>
-          <EditSeekBar style={{ margin: "0 68px" }} value={p[sel]} min={0} max={1} def={MENUS.find((m) => m.key === sel)!.def} onChange={(v) => setP((o) => ({ ...o, [sel]: v }))} />
+        <OptionRow bottom={MENU} label={MENUS.find((m) => m.key === sel)!.label} labelWidth={84}>
+          <EditSeekBar value={p[sel]} min={0} max={1} def={MENUS.find((m) => m.key === sel)!.def} onChange={(v) => setP((o) => ({ ...o, [sel]: v }))} />
         </OptionRow>
       )}
 
-      <Panel title="DSLR" onClose={() => openSub(null)} onConfirm={() => void confirm()}>
-        {ready && (
-          <FeatureList count={MENUS.length}>
-            {MENUS.map((m) => <FeatureButton key={m.key} icon={m.icon} label={m.label} selected={sel === m.key} onClick={() => setSel(m.key)} />)}
-          </FeatureList>
-        )}
+      <Panel title="Depth blur" onClose={() => openSub(null)} onConfirm={() => void confirm()}>
+        {ready ? (
+          <div className="flex h-full flex-col">
+            <div className="relative flex-1">
+              <FeatureList>
+                {MENUS.map((m) => <FeatureButton key={m.key} icon={m.icon} label={m.label} selected={sel === m.key} onClick={() => setSel(m.key)} />)}
+              </FeatureList>
+            </div>
+            <p className="pb-4 text-center text-[12px] text-fg-3">Tap the photo to choose what stays sharp</p>
+          </div>
+        ) : null}
       </Panel>
     </>
   );

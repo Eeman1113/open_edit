@@ -2,9 +2,9 @@
 // recorded video frames: the brand mark from the active asset pack plus the name in the display face.
 import { brandUrl } from "@/components/ui/pack";
 import { TOKENS } from "@/components/ui/theme";
-import { getSetting } from "@/lib/settings";
+import { SETTINGS, getSetting } from "@/lib/settings";
 
-export const WATERMARK_SETTING = "isUseWatermark_v510";
+export const WATERMARK_SETTING = SETTINGS.watermark;
 
 let cached: Promise<HTMLImageElement> | null = null;
 export function loadWatermark(): Promise<HTMLImageElement> {

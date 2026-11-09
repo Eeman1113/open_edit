@@ -3,11 +3,13 @@
 // Look creator ("Create a look", from Discover and Me): build a reusable camera look out of stickers, face
 // transforms, makeup, filters, effects and more, previewed live on your camera or on a photo. Asset lists come from
 // the content API; without one each list shows a friendly empty state.
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button, Dialog, EmptyState, Icon, IconButton, Sheet, Spinner, Tabs, cx, type IconName } from "@/components/ui";
+import { Button, Dialog, EmptyState, Icon, IconButton, Sheet, Spinner, Tabs, Thumb, cx, type IconName } from "@/components/ui";
 import { PhotoPicker } from "@/components/ai/PhotoPicker";
 import { asset } from "@/lib/base";
+import type { CatalogItem } from "@/lib/content/types";
 import { getPhoto } from "@/lib/store";
 
 type Menu = { id: string; icon: IconName; label: string };
@@ -29,9 +31,22 @@ export const MENUS: Menu[] = [
   { id: "adjust", icon: "edit", label: "Adjust" },
 ];
 
+/** One catalogue entry: preview (or a seeded swatch) and name; a link when the entry opens somewhere in the app. */
+function CatalogTile({ item }: { item: CatalogItem }) {
+  const body = (
+    <>
+      <Thumb src={item.thumbnail} seed={item.id} label={item.name.slice(0, 2)} fit="contain" className="aspect-square w-full rounded-md bg-raised" />
+      <span className="mt-1 block w-full truncate text-center text-[11px] text-fg-2">{item.name}</span>
+    </>
+  );
+  return item.href
+    ? <Link href={item.href} className="oe-press block min-w-0" title={item.name}>{body}</Link>
+    : <div className="min-w-0" title={item.name}>{body}</div>;
+}
+
 /** Loads a list from the content API (/api/looks/<kind>); renders loading / empty / error views. */
 export function useContentCatalog(kind: string | null, query = ""): { view: ReactNode } {
-  const [state, setState] = useState<"loading" | "error" | { items: { id: string; name: string }[] }>("loading");
+  const [state, setState] = useState<"loading" | "error" | { items: CatalogItem[] }>("loading");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (kind == null) return;
@@ -39,7 +54,7 @@ export function useContentCatalog(kind: string | null, query = ""): { view: Reac
     // eslint-disable-next-line react-hooks/set-state-in-effect -- new request per open / retry
     setState("loading");
     fetch(asset(`/api/looks/${kind}${query ? `?q=${encodeURIComponent(query)}` : ""}`))
-      .then((r) => (r.ok ? (r.json() as Promise<{ items?: { id: string; name: string }[] }>) : Promise.reject(new Error(String(r.status)))))
+      .then((r) => (r.ok ? (r.json() as Promise<{ items?: CatalogItem[] }>) : Promise.reject(new Error(String(r.status)))))
       .then((j) => alive && setState({ items: j.items ?? [] }), () => alive && setState("error"));
     return () => { alive = false; };
   }, [kind, query, attempt]);
@@ -48,7 +63,7 @@ export function useContentCatalog(kind: string | null, query = ""): { view: Reac
     : state === "error"
       ? <EmptyState icon="offline" title="No asset library connected" body="This build doesn’t include an online library for looks. A site admin can connect one." action={<Button size="sm" variant="secondary" icon="reset" onClick={() => setAttempt((a) => a + 1)}>Try again</Button>} />
       : state.items.length
-        ? <div className="grid grid-cols-4 gap-2 p-4">{state.items.map((it) => <div key={it.id} className="aspect-square rounded-md bg-raised p-1 text-[11px]">{it.name}</div>)}</div>
+        ? <div className="grid grid-cols-4 gap-x-2 gap-y-3 p-4">{state.items.map((it) => <CatalogTile key={it.id} item={it} />)}</div>
         : <EmptyState icon="empty" title="Nothing here yet" />;
   return { view };
 }

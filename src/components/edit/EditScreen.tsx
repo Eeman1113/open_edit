@@ -1,18 +1,19 @@
 "use client";
 
-// EPActivity / EditPhotoFragment (fragment_edit_photo.xml): preview (PinchZoomTextureView on #171717),
-// top bar (back / layer / SAVE / Fit screen), tool content area (186dp) and the text tab bar
-// (EPContentMenu) at the bottom. After SAVE: EditConfirmFragment ("Saved!" + ShareBar).
-import { BASE } from "@/lib/base";
+// Photo editor shell: top bar (back · undo / redo · layers · Save), the zoomable preview, the dock with the active
+// tab's panel and the tab bar, and the tool pages that replace the dock (their Cancel / title / Apply bar is portalled
+// into the top bar). Saving shows the Saved page with sharing.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { d } from "@/components/ui/legacy-drawable";
+import { Button, Icon, IconButton, Spinner, cx, toast } from "@/components/ui";
 import { useBackHandler } from "@/lib/back";
-import { download, getPhoto, savePhoto } from "@/lib/store";
+import { getPhoto, savePhoto } from "@/lib/store";
 import { EditCtx, type EditCtxValue, type PreviewTool, type Rect, type Sub } from "./ctx";
-import { initialDoc, NOT_ON_WEB, TABS, type Doc, type TabId } from "./model";
+import { initialDoc, NOT_ON_WEB, PORTRAIT, TABS, TOOLS, type Doc, type TabId } from "./model";
 import { composite, decodeToCanvas, exportDoc, loadFonts, Preview, stampImage } from "./pipeline";
-import { AlertDialog, Img, Toast, useToast } from "./ui";
+import { AlertDialog, MENU, TAB_H, TOP_H } from "./ui";
+import { sampleBlob } from "./devSample";
+import { SavedImage, SavedPage } from "./SavedPage";
 import { FilterPanel } from "./panels/Filter";
 import { AdjustPanel, CurvesPanel, HslPanel, SplitPanel } from "./panels/Adjust";
 import { CropTool, ToolsPanel } from "./panels/Tools";
@@ -20,31 +21,32 @@ import { AutoSkinPanel, PortraitPanel, SkinTonePanel } from "./panels/Portrait";
 import { detectFaces, detectPose, faceEditActive, nonZero, peekFaces, peekPose } from "./tools/portrait/faceEngine";
 import { BorderPanel } from "./panels/Border";
 import { BrushAddPage, LayerAdjustPage, LayerEraserPage, LayerGizmo, LayerListPopup, LayerPanel, StampAddPage, TextAddPage } from "./panels/Layers";
-import { StickerServerPanel } from "./panels/Server";
 import { ArFilterPanel } from "./panels/ArFilter";
 import { ExtSub, isExtSub } from "./tools/ExtSub";
 
-const MENU_H = 186; // edit_menu_height
-const TAB_H = 52;   // edit_tab_menu_height
-// PinchZoomTextureView controller (C14956a): max 16x, min 0.4x of the fit scale.
+// pinch zoom limits, relative to the fitted size
 const MAX_ZOOM = 16, MIN_ZOOM = 0.4;
 
-/** Dev-only init (headless verification). */
+/** Dev-only init (headless proofs). */
 export interface DevInit { sample: boolean; tab?: string; sub?: string; adjust?: string; filter?: string; save?: boolean; share?: boolean }
 
-// EPPageViewModel removes RECOMMEND when the recommendation list is empty; the web port has no
-// recommendation server data, so the tab is not shown (same as the original offline).
-const VISIBLE_TABS = TABS.filter((t) => t.id !== "RECOMMEND");
-
 const photoKey = (doc: Doc) => JSON.stringify([doc.base, doc.filter, doc.adjust, doc.curves, doc.hsl, doc.split, doc.beauty]);
-
-/** EPPreviewZoomViewModel.Nf: >=100% as an integer, below 100% with one decimal. */
 const scaleText = (s: number) => (s >= 1 ? `${Math.round(s * 100)}%` : `${(Math.round(s * 1000) / 10).toFixed(1)}%`);
+
+/** `?tool=` values that open a tool page straight away (tools by key, portrait pages by id). */
+function toolTarget(tool: string | undefined): { tab: TabId; sub: Sub } | null {
+  if (!tool) return null;
+  if (tool === "crop") return { tab: "TOOLS", sub: "crop" };
+  if (TOOLS.some((t) => t.key === tool)) return { tab: "TOOLS", sub: `x:${tool}` };
+  const p = PORTRAIT.find((x) => x.key === tool.toUpperCase());
+  if (p) return { tab: "PORTRAIT", sub: p.key === "RETOUCH_AUTO" ? "autoskin" : p.key === "SKINTONE" ? "skintone" : `x:${p.key}` };
+  return null;
+}
 
 interface Zoom { s: number; x: number; y: number }
 const NO_ZOOM: Zoom = { s: 1, x: 0, y: 0 };
 
-export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
+export function EditScreen({ id, tool, dev }: { id: string; tool?: string; dev?: DevInit }) {
   const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
   const outRef = useRef<HTMLCanvasElement>(null);
@@ -54,6 +56,7 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
   const lastBase = useRef(-1);
   const toolRef = useRef<PreviewTool | null>(null);
   const idSeq = useRef(1);
+  const target = useMemo(() => toolTarget(tool), [tool]);
 
   const [status, setStatus] = useState<"loading" | "ok" | "missing" | "video" | "error">("loading");
   const [originalUrl, setOriginalUrl] = useState("");
@@ -64,24 +67,23 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
   });
   const [live, setLiveState] = useState<Doc | null>(null);
   const doc = live ?? hist.list[hist.i];
-  // EPPageViewModel.getAndSetInitTab: PORTRAIT when a face is detected, else TOOLS.
-  const [tab, setTabState] = useState<TabId>(() => (dev?.tab && TABS.some((t) => t.id === dev.tab) ? dev.tab as TabId : "TOOLS"));
+  // Start on Tools (or the requested tool); switch to Portrait once a face is found unless the user picked a tab.
+  const [tab, setTabState] = useState<TabId>(() => (dev?.tab && TABS.some((t) => t.id === dev.tab) ? dev.tab as TabId : target?.tab ?? "TOOLS"));
   const [prevTab, setPrevTab] = useState<TabId>("TOOLS");
-  /** The user chose a tab before face detection finished: don't override it. */
-  const tabPicked = useRef(false);
+  const tabPicked = useRef(!!target || !!dev?.tab);
   const [sub, setSub] = useState<Sub>(() => (dev?.sub as Sub) ?? null);
   const [selected, setSelected] = useState<number | null>(null);
   const [original, setOriginal] = useState(false);
   const [size, setSize] = useState({ w: 360, h: 640 });
   const [frame, setFrame] = useState({ fw: 1, fh: 1 });
   const [tick, setTick] = useState(0);
-  const [toastText, toast] = useToast();
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<{ url: string; blob: Blob } | null>(null);
   const [layerPopup, setLayerPopup] = useState(false);
   const [zoom, setZoom] = useState<Zoom>(NO_ZOOM);
   const [showScale, setShowScale] = useState(false);
+  const [barSlot, setBarSlot] = useState<HTMLDivElement | null>(null);
 
   /* ---------------------------------------------------------------- load */
   useEffect(() => {
@@ -89,7 +91,7 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     let url = "";
     (async () => {
       let blob: Blob | undefined;
-      if (dev?.sample) blob = await fetch(`${BASE}/drawable/img_fbpopup_bg.webp`).then((r) => r.blob()).catch(() => undefined);
+      if (dev?.sample) blob = await sampleBlob().catch(() => undefined);
       else {
         const p = await getPhoto(id).catch(() => undefined);
         if (p?.blob.type.startsWith("video/")) { if (alive) setStatus("video"); return; }
@@ -101,7 +103,7 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
         const base = await decodeToCanvas(blob);
         if (!alive) return;
         bases.current = [base];
-        setFrame({ fw: base.width, fh: base.height }); // no square first frame before the first composite
+        setFrame({ fw: base.width, fh: base.height });
         url = URL.createObjectURL(blob);
         setOriginalUrl(url);
         const pv = new Preview();
@@ -109,7 +111,8 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
         await Promise.all([pv.ready, loadFonts()]);
         if (!alive) return;
         setStatus("ok");
-        if (!dev?.tab)
+        if (target && !dev?.sub) setSub(target.sub);
+        if (!tabPicked.current)
           detectFaces(base)
             .then((d) => { if (alive && d.faces.length && !tabPicked.current) setTabState("PORTRAIT"); })
             .catch(() => {});
@@ -123,7 +126,7 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
       previewRef.current?.dispose();
       previewRef.current = null;
     };
-  }, [id, dev?.sample]);
+  }, [id, dev?.sample, dev?.sub, target]);
 
   useEffect(() => {
     const el = rootRef.current;
@@ -147,8 +150,7 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
         lastBase.current = doc.base;
         lastKey.current = "";
       }
-      // A new base (crop, rotate, Remove/Expand bake...) keeps the non-destructive face edits: analyse it right away so
-      // they stay applied without reopening a face tool (the face stage reads the per-base detection cache).
+      // A new base (crop, rotate, erase, expand...) keeps the face edits: analyse it right away so they stay applied.
       const fe = doc.beauty.face;
       if (faceEditActive(fe)) {
         const needPose = !!fe?.body && nonZero(fe.body) && !peekPose(base);
@@ -159,7 +161,7 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
         }
       }
       const k = photoKey(doc);
-      if (k !== lastKey.current) { pv.renderPhoto(doc); lastKey.current = k; }
+      if (k !== lastKey.current) { pv.renderPhoto(doc, () => { lastKey.current = ""; rerender(); }); lastKey.current = k; }
       const [pw, ph] = pv.size;
       const g = composite(out, pv.gl, pw, ph, doc, rerender);
       if (g.fw !== frame.fw || g.fh !== frame.fh) setFrame({ fw: g.fw, fh: g.fh });
@@ -167,25 +169,21 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     return () => cancelAnimationFrame(raf);
   }, [status, doc, size, tick, frame, rerender]);
 
-  // fit-centre rect in the preview area (top .. guide_menu_area).
-  // EPPreviewZoomViewModel.Pf: for 3:4-ish images (0.70 <= w/h <= 0.75) the engine gets a top padding of
-  // (viewH - contentH) (bul.J -> render rect inset top), with defaultTy = half of it: the photo sits at the bottom
-  // of the preview, right above the menu, instead of centred.
+  // preview area: between the top bar and the dock, with a small inset so the photo never touches the chrome
+  const area = useMemo(() => ({ x: 0, y: TOP_H, w: size.w, h: Math.max(1, size.h - MENU - TOP_H) }), [size]);
   const fitRect: Rect = useMemo(() => {
-    const aw = size.w, ah = Math.max(1, size.h - MENU_H);
+    const pad = 12;
+    const aw = area.w - pad * 2, ah = area.h - pad * 2;
     const k = Math.min(aw / frame.fw, ah / frame.fh);
     const w = frame.fw * k, h = frame.fh * k;
-    const r = frame.fw / frame.fh;
-    const top = r >= 0.7 && r <= 0.75 ? Math.round(ah - h) : (ah - h) / 2;
-    return { x: (aw - w) / 2, y: top, w, h };
-  }, [size, frame]);
+    return { x: area.x + (area.w - w) / 2, y: area.y + (area.h - h) / 2, w, h };
+  }, [area, frame]);
   // displayed rect after pinch zoom / pan (screen = fit * s + t)
   const rect: Rect = useMemo(() => ({
     x: fitRect.x * zoom.s + zoom.x, y: fitRect.y * zoom.s + zoom.y, w: fitRect.w * zoom.s, h: fitRect.h * zoom.s,
   }), [fitRect, zoom]);
   const zoomed = zoom.s !== 1 || zoom.x !== 0 || zoom.y !== 0;
 
-  // animated preview transform (PinchZoomTextureView.m62786v: matrix animation, decelerate)
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; });
   const animRaf = useRef(0);
@@ -201,17 +199,15 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
   }, []);
   useEffect(() => () => cancelAnimationFrame(animRaf.current), []);
   const resetZoom = useCallback(() => animateZoom(NO_ZOOM, 200), [animateZoom]);
-  /** baa.C3828a.mo3310c: setRectToRect(faceRect, previewRect, CENTER) pre-concatenated with the current matrix, 300 ms. */
+  /** Zoom so that `r` (as displayed now) fills the preview area, centred. */
   const zoomTo = useCallback((r: Rect, ms = 300) => {
-    const pw = size.w, ph = Math.max(1, size.h - MENU_H);
     if (r.w <= 0 || r.h <= 0) return;
     const z = zoomRef.current;
-    const k0 = Math.min(pw / r.w, ph / r.h);
+    const k0 = Math.min(area.w / r.w, area.h / r.h);
     const s = Math.min(MAX_ZOOM, z.s * k0), k = s / z.s;
     const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
-    // screen' = k * (screen - c) + previewCentre ; screen = fit * s + t
-    animateZoom({ s, x: k * (z.x - cx) + pw / 2, y: k * (z.y - cy) + ph / 2 }, ms);
-  }, [size, animateZoom]);
+    animateZoom({ s, x: k * (z.x - cx) + area.x + area.w / 2, y: k * (z.y - cy) + area.y + area.h / 2 }, ms);
+  }, [area, animateZoom]);
 
   /* ---------------------------------------------------------------- history */
   const commit = useCallback((next: Doc) => {
@@ -231,14 +227,13 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     setTabState(t);
   }, [tab]);
 
-  // switching features resets the preview transform (EPPreviewZoomViewModel.reset)
+  // switching features resets the preview zoom
   const [zoomKey, setZoomKey] = useState(`${tab}|${sub}`);
   if (zoomKey !== `${tab}|${sub}`) { setZoomKey(`${tab}|${sub}`); setZoom(NO_ZOOM); }
-  // a running zoom animation stops when the feature changes
   useEffect(() => () => cancelAnimationFrame(animRaf.current), [zoomKey]);
 
   const ctx: EditCtxValue = {
-    doc, setLive: setLiveState, commit, undo, redo, setOriginal, toast, sub,
+    doc, setLive: setLiveState, commit, undo, redo, setOriginal, toast: (s) => toast(s), sub,
     openSub: (s) => { setLiveState(null); setSub(s); },
     tab, setTab, selected, select: setSelected, rect, frame,
     srcCanvas: () => previewRef.current?.src ?? null,
@@ -247,6 +242,7 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     nextId: () => idSeq.current++,
     devAdjust: dev?.adjust,
     zoomTo,
+    barSlot,
   };
 
   /* ---------------------------------------------------------------- preview pointer: tools + pinch zoom */
@@ -268,7 +264,7 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, local(e));
     if (pointers.current.size === 2) {
-      // second finger: end a running tool stroke and start pinching
+      // a second finger ends a running tool stroke and starts pinching
       if (gesture.current?.kind === "tool") { const [x, y] = toFrame(e); toolRef.current?.up?.(x, y, e.nativeEvent); }
       const { d: dist, m } = pinchInfo();
       cancelAnimationFrame(animRaf.current);
@@ -309,11 +305,11 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     if (g?.kind === "pinch" && pointers.current.size < 2) {
       setShowScale(false);
       gesture.current = null;
-      if (zoom.s < 1) resetZoom(); // zoomed out below fit springs back
+      if (zoom.s < 1) resetZoom(); // zoomed out below the fit size: spring back
     }
     if (g?.kind === "pan" && pointers.current.size === 0) gesture.current = null;
   };
-  // desktop: ctrl/trackpad pinch arrives as ctrl+wheel
+  // desktop: trackpad pinch arrives as ctrl + wheel
   const scaleTimer = useRef<number | undefined>(undefined);
   useEffect(() => {
     const el = rootRef.current?.querySelector<HTMLElement>("[data-preview]");
@@ -327,7 +323,6 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
         const bx = (mx - z.x) / z.s, by = (my - z.y) / z.s;
         return s === 1 ? NO_ZOOM : { s, x: mx - bx * s, y: my - by * s };
       });
-      // showScaleForDuration(1000)
       setShowScale(true);
       window.clearTimeout(scaleTimer.current);
       scaleTimer.current = window.setTimeout(() => setShowScale(false), 1000);
@@ -341,19 +336,18 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     if (window.history.length > 1) router.back();
     else router.push("/gallery");
   };
+  const exitFullPage = () => setTab(prevTab === "STICKER" ? "TOOLS" : prevTab);
   const onBack = () => {
     if (sub) { setSub(null); setLiveState(null); return; }
     if (modified) setConfirmLeave(true);
     else leave();
   };
-  // hardware back (EPActivity.onBackPressed): the deeper layers (dialogs, share bar, stamp shop, AR filter page...)
-  // register their own handlers above this one; here: layer list popup → sub-page / tool page → Effects page →
-  // back to the gallery (with the leave dialog when modified)
+  // back key: dialogs, sheets and pages register their own handlers above this one; here the layer list, then the
+  // open tool page, then leaving (asking first when there are unsaved edits)
   useBackHandler(() => {
     if (status !== "ok") { router.push("/gallery"); return; }
     if (saving) return;
     if (layerPopup) { setLayerPopup(false); return; }
-    if (!sub && tab === "EFFECT_STICKER") { setTab(prevTab === "EFFECT_STICKER" ? "TOOLS" : prevTab); return; }
     onBack();
   }, !saved);
   const onSave = useCallback(async () => {
@@ -362,18 +356,16 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     if (!base) return;
     setSaving(true);
     try {
-      // stamp images must be decoded for the export composite
       doc.layers.forEach((l) => { if (l.kind === "stamp") stampImage(l.src); });
       const { blob, width, height } = await exportDoc(base, doc);
-      // EditPhotoFragment.savePhoto: full resolution into the device gallery
-      await savePhoto(blob, width, height, "B612");
+      await savePhoto(blob, width, height);
       setSaved({ url: URL.createObjectURL(blob), blob });
     } catch {
-      toast("Failed to save a photo."); // alert_fail_to_camera_roll
+      toast("Couldn't save the photo. Please try again.", { icon: "alert", tone: "danger" });
     } finally {
       setSaving(false);
     }
-  }, [saving, doc, toast]);
+  }, [saving, doc]);
   useEffect(() => () => { if (saved) URL.revokeObjectURL(saved.url); }, [saved]);
   const devSaved = useRef(false);
   const onSaveRef = useRef(onSave);
@@ -384,7 +376,7 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     window.setTimeout(() => void onSaveRef.current(), 1500);
   }, [status, dev?.save]);
 
-  /* ---------------------------------------------------------------- tab bar: CenterScrollLayoutManager */
+  /* ---------------------------------------------------------------- tab bar: keep the active tab in view */
   const tabBarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const bar = tabBarRef.current;
@@ -394,36 +386,45 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
   }, [tab, status, sub, saved]);
 
   if (status !== "ok") {
+    const msg = status === "video" ? { t: "This is a video", b: "Open it in the video editor instead." }
+      : status === "missing" ? { t: "Photo not found", b: "It may have been deleted from the gallery." }
+      : status === "error" ? { t: "Couldn't open this photo", b: NOT_ON_WEB } : null;
     return (
-      <div ref={rootRef} className="absolute inset-0 flex items-center justify-center bg-black text-white">
-        {status === "loading" ? (
-          <img src={d("lens_loading")} alt="" className="spin-save" style={{ width: 37, height: 37 }} />
-        ) : (
-          <div className="flex flex-col items-center gap-4 px-8 text-center" style={{ fontSize: 14 }}>
-            <p style={{ color: "rgba(255,255,255,0.6)" }}>
-              {status === "video" ? NOT_ON_WEB : status === "missing" ? "No Photos" : "The preparation failed. Please try again."}
-            </p>
-            <button type="button" onClick={() => router.push("/gallery")} className="text-white" style={{ height: 32, padding: "0 15px", borderRadius: 18, background: "#0bd4d2" }}>OK</button>
-          </div>
-        )}
-        <button type="button" onClick={() => router.push("/gallery")} className="absolute" style={{ left: 8, top: 9, width: 34, height: 34 }} aria-label="Back">
-          <Img name="icon_edit_top_back_shadow" size={34} />
-        </button>
+      <div ref={rootRef} className="absolute inset-0 flex flex-col bg-bg text-fg">
+        <div className="flex items-center px-2" style={{ height: TOP_H }}>
+          <IconButton icon="back" label="Back" variant="raised" onClick={() => router.push("/gallery")} />
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-10 pb-16 text-center">
+          {!msg ? <Spinner size={28} className="text-accent" /> : (
+            <>
+              <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-raised text-fg-2"><Icon name={status === "video" ? "video" : "image"} size={26} /></span>
+              <div>
+                <p className="font-display text-[18px] font-semibold">{msg.t}</p>
+                <p className="mt-1 text-[14px] text-fg-3">{msg.b}</p>
+              </div>
+              <Button onClick={() => (status === "video" ? router.replace(`/video-edit?id=${encodeURIComponent(id)}`) : router.push("/gallery"))}>
+                {status === "video" ? "Open video editor" : "Back to gallery"}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     );
   }
 
   const layerCount = doc.layers.length;
   const isLayerTab = tab === "STAMP" || tab === "TEXT" || tab === "BRUSH";
+  const fullPage = tab === "STICKER";
+  const mainMode = !sub && !fullPage;
 
   return (
     <EditCtx.Provider value={ctx}>
-      <div ref={rootRef} className="absolute inset-0 overflow-hidden bg-black" style={{ touchAction: "none" }}>
-        {/* preview FrameLayout: #171717 from the top to guide_menu_area */}
+      <div ref={rootRef} className="absolute inset-0 overflow-hidden bg-bg text-fg" style={{ touchAction: "none" }} data-editor>
+        {/* preview: the whole root takes the gestures; the photo sits in the area between the bars */}
         <div
           data-preview
-          className="absolute inset-x-0 top-0 overflow-hidden"
-          style={{ bottom: MENU_H, background: "#171717", touchAction: "none" }}
+          className="absolute inset-0 overflow-hidden"
+          style={{ touchAction: "none", background: "radial-gradient(120% 80% at 50% 40%, var(--oe-panel), var(--oe-bg) 70%)" }}
           onPointerDown={onPDown}
           onPointerMove={onPMove}
           onPointerUp={onPUp}
@@ -431,32 +432,60 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
         >
           <canvas
             ref={outRef}
-            className="absolute"
+            className="absolute shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
             style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, visibility: original || sub === "crop" ? "hidden" : "visible" }}
           />
-          {/* hold-to-compare: the untouched photo in the same place (maxWidth none: preflight's img max-width 100% would
-              shrink it to the preview width while zoomed in) */}
+          {/* hold to compare: the untouched photo in the same place (max-width none so zoom isn't clamped) */}
           {original && originalUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={originalUrl} alt="" className="pointer-events-none absolute object-contain" draggable={false} style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, maxWidth: "none", maxHeight: "none" }} />
+          )}
+          {original && (
+            <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-full bg-glass px-3 py-1 text-[12px] font-semibold text-white backdrop-blur-md" style={{ top: TOP_H + 10 }}>Original</span>
           )}
         </div>
 
         {isLayerTab && !original && <LayerGizmo />}
 
-        {/* scale_text_view: while pinching, centred in the preview */}
         {showScale && (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-center" style={{ bottom: MENU_H }}>
-            <span className="text-white" style={{ fontSize: 13, lineHeight: "15px", padding: "14px 17px", borderRadius: 10, background: "rgba(0,0,0,0.6)" }}>{scaleText(zoom.s)}</span>
+          <div className="pointer-events-none absolute inset-x-0 z-30 flex items-center justify-center" style={{ top: TOP_H, bottom: MENU }}>
+            <span className="tabular rounded-md bg-glass px-4 py-3 font-display text-[15px] font-semibold text-white backdrop-blur-md">{scaleText(zoom.s)}</span>
+          </div>
+        )}
+        {zoomed && mainMode && (
+          <button type="button" onClick={resetZoom} className="oe-press absolute left-1/2 z-30 flex h-8 -translate-x-1/2 items-center gap-1.5 rounded-full bg-glass px-3 text-[13px] font-semibold text-white backdrop-blur-md" style={{ top: TOP_H + 10 }}>
+            <Icon name="full" size={15} /> Fit to screen
+          </button>
+        )}
+
+        {/* dock: the active tab's panel above the tab bar */}
+        {mainMode && (
+          <div className="absolute inset-x-0 bottom-0 z-10 rounded-t-xl bg-panel shadow-[0_-8px_24px_rgba(0,0,0,0.35)]" style={{ height: MENU }}>
+            <div className="absolute inset-x-0 bottom-0 border-t border-line" style={{ height: TAB_H }}>
+              <div ref={tabBarRef} role="tablist" aria-label="Editor sections" className="no-scrollbar flex h-full items-stretch overflow-x-auto px-1.5">
+                {TABS.map((t) => {
+                  const on = tab === t.id;
+                  return (
+                    <button
+                      key={t.id} data-tab={t.id} type="button" role="tab" aria-selected={on} onClick={() => setTab(t.id)}
+                      className={cx("oe-press relative flex w-[62px] flex-none flex-col items-center justify-center gap-1 transition-colors", on ? "text-fg" : "text-fg-3")}
+                    >
+                      <span className={cx("absolute top-0 h-[3px] w-6 rounded-b-full bg-accent transition-opacity", on ? "opacity-100" : "opacity-0")} />
+                      <Icon name={t.icon} size={21} />
+                      <span className="text-[11px] font-medium">{t.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
 
-        {/* tool content (container_content) */}
         {!sub && tab === "PORTRAIT" && <PortraitPanel />}
         {!sub && tab === "TOOLS" && <ToolsPanel />}
         {!sub && tab === "FILTER" && <FilterPanel />}
         {!sub && tab === "ADJUST" && <AdjustPanel />}
-        {!sub && tab === "EFFECT_STICKER" && <StickerServerPanel kind="effect" onExit={() => setTab(prevTab === "EFFECT_STICKER" ? "TOOLS" : prevTab)} />}
-        {!sub && tab === "STICKER" && <ArFilterPanel onExit={() => setTab(prevTab === "STICKER" ? "TOOLS" : prevTab)} />}
+        {!sub && tab === "STICKER" && <ArFilterPanel onExit={exitFullPage} />}
         {!sub && tab === "STAMP" && <LayerPanel kind="stamp" />}
         {!sub && tab === "TEXT" && <LayerPanel kind="text" />}
         {!sub && tab === "BRUSH" && <LayerPanel kind="brush" />}
@@ -475,196 +504,54 @@ export function EditScreen({ id, dev }: { id: string; dev?: DevInit }) {
         {sub === "layer-eraser" && <LayerEraserPage />}
         {isExtSub(sub) && <ExtSub key={sub} sub={sub} />}
 
-        {/* list_tab_menu (52dp, paddingH 12, LinearItemDecoration 10/9dp) with a 1dp #191919 top line */}
-        {!sub && !(tab === "EFFECT_STICKER" || tab === "STICKER") && (
-          <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: TAB_H }}>
-            <div ref={tabBarRef} className="no-scrollbar flex h-full items-center overflow-x-auto" style={{ paddingLeft: 12, paddingRight: 12, gap: size.w > 360 ? 10 : 9 }}>
-              {VISIBLE_TABS.map((t) => (
-                <button
-                  key={t.id}
-                  data-tab={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
-                  className="flex h-full flex-none items-center whitespace-nowrap"
-                  style={{ padding: "0 8px", fontSize: 14, lineHeight: "16px", color: tab === t.id ? "#0bd4d2" : "rgba(255,255,255,0.6)" }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <div className="pointer-events-none absolute inset-x-0 top-0" style={{ height: 1, background: "#191919" }} />
-          </div>
-        )}
-
-        {/* top bar (guide_top_bar 52dp, overlays the image); hidden under the full-screen Effects / AR filter pages */}
-        {!sub && tab !== "EFFECT_STICKER" && tab !== "STICKER" && (
-          <>
-            <button type="button" onClick={onBack} className="absolute z-20" style={{ left: 8, top: 9, width: 34, height: 34 }} aria-label="Back">
-              <Img name="icon_edit_top_back_shadow" size={34} />
-            </button>
-            {/* btn_fit_screen: shown while the preview is zoomed/panned */}
-            {zoomed && (
-              <div className="absolute inset-x-0 z-20 flex justify-center" style={{ top: 10, pointerEvents: "none" }}>
-                <button type="button" onClick={resetZoom} className="flex items-center text-white" style={{ pointerEvents: "auto", height: 36, padding: "0 15px", borderRadius: 18, background: "rgba(0,0,0,0.6)" }}>
-                  <Img name="icon_edit_gallery_fit" size={15} />
-                  <span style={{ paddingLeft: 5, fontSize: 13, lineHeight: "15px" }}>Fit screen</span>
-                </button>
+        {/* top bar: the main commands, or the bar of the open tool page (portalled in) */}
+        <div ref={setBarSlot} className="absolute inset-x-0 top-0 z-40 bg-bg/95 backdrop-blur-md" style={{ height: TOP_H }}>
+          {mainMode && (
+            <div className="flex h-full items-center gap-1 px-2">
+              <IconButton icon="back" label="Back" variant="raised" onClick={onBack} />
+              <div className="flex flex-1 items-center justify-center gap-1">
+                <IconButton icon="undo" label="Undo" disabled={!undo.can} onClick={undo.on} />
+                <IconButton icon="redo" label="Redo" disabled={!redo.can} onClick={redo.on} />
               </div>
-            )}
-            <div className="absolute right-0 top-0 z-20 flex items-center" style={{ height: 52, paddingRight: 8 }}>
-              {layerCount > 0 && (
-                <button type="button" onClick={() => setLayerPopup((v) => !v)} className="relative flex-none" style={{ width: 42, height: 34, marginRight: 4 }} aria-label="Layers">
-                  <Img name="icon_edit_top_layer_shadow" size={34} style={{ position: "absolute", left: 0, top: 0 }} />
-                  {/* text_layer_count: marginStart 18 / marginTop 2 from icon_layer, bg_edit_top_layer_count_with_vip */}
-                  <span
-                    className="absolute flex items-center justify-center font-bold"
-                    style={{ left: 18, top: 2, height: 14, minWidth: 14, padding: "0 3px", borderRadius: 7, fontSize: 10, lineHeight: "10px", color: "#222222", background: "linear-gradient(180deg, #ffd901, #ffca13)" }}
-                  >
-                    {layerCount}
-                  </span>
-                </button>
-              )}
-              <button type="button" onClick={() => void onSave()} className="flex items-center text-white" style={{ height: 32, padding: "0 15px", borderRadius: 18, background: "#0bd4d2", fontSize: 14 }}>
-                SAVE
-              </button>
+              <IconButton icon="layers" label={`Layers (${layerCount})`} variant="raised" disabled={!layerCount} active={layerPopup} onClick={() => setLayerPopup((v) => !v)}>
+                {layerCount > 0 && <span className="tabular absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-on-accent">{layerCount}</span>}
+              </IconButton>
+              <Button size="sm" icon="save" className="ml-1 h-10 rounded-full px-4" onClick={() => void onSave()}>Save</Button>
             </div>
-            {layerPopup && layerCount > 0 && <LayerListPopup onClose={() => setLayerPopup(false)} />}
-          </>
-        )}
-
-        <Toast text={toastText} />
+          )}
+        </div>
+        {layerPopup && layerCount > 0 && mainMode && <LayerListPopup onClose={() => setLayerPopup(false)} />}
 
         {confirmLeave && (
           <AlertDialog
-            message="Are you sure you want to leave without saving?"
-            cancel="Cancel"
-            ok="Leave"
+            icon="trash" destructive
+            title="Discard your edits?"
+            message="You haven't saved this photo yet. Leaving now throws the changes away."
+            ok="Discard" cancel="Keep editing"
             onCancel={() => setConfirmLeave(false)}
             onOk={() => { setConfirmLeave(false); leave(); }}
           />
         )}
 
         {saving && (
-          <div className="absolute inset-0 z-[90] flex items-center justify-center">
-            <div className="flex items-center justify-center" style={{ width: 97, height: 97, borderRadius: 8, background: "rgba(0,0,0,0.5)" }}>
-              <img src={d("lens_loading")} alt="" className="spin-save" style={{ width: 57, height: 57 }} />
+          <div className="absolute inset-0 z-[90] flex items-center justify-center bg-scrim/40">
+            <div className="flex items-center gap-3 rounded-lg bg-panel px-5 py-4 shadow-2xl ring-1 ring-line">
+              <Spinner size={22} className="text-accent" />
+              <span className="text-[15px] font-medium">Saving full size…</span>
             </div>
           </div>
         )}
 
         {saved && (
-          <SaveConfirm
-            url={saved.url}
+          <SavedPage
             blob={saved.blob}
+            media={<SavedImage url={saved.url} />}
             initialShare={!!dev?.share}
             onClose={() => setSaved(null)}
-            onBack={() => router.push("/gallery")}
+            onDone={() => router.push("/gallery")}
           />
         )}
       </div>
     </EditCtx.Provider>
-  );
-}
-
-/* ================================================================== EditConfirmFragment (PHOTO) */
-
-/**
- * yx8/ty8/ny8: black Scaffold; top bar 52dp (padding 8/9) with icon_edit_top_close, "Saved!"
- * (15/600, white) and icon_edit_top_share_shadow; body = the saved photo, contain-fit, no buttons.
- * Enters with slide_in_right; X pops back to the editor; system back opens the Gallery.
- */
-function SaveConfirm({ url, blob, initialShare, onClose, onBack }: { url: string; blob: Blob; initialShare: boolean; onClose: () => void; onBack: () => void }) {
-  const [share, setShare] = useState(initialShare);
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const r = requestAnimationFrame(() => setShown(true));
-    return () => cancelAnimationFrame(r);
-  }, []);
-  // back press order: ShareBar (its own handler, above this one) first, else Gallery
-  useBackHandler(onBack);
-  return (
-    <div
-      className="absolute inset-0 z-[95] flex flex-col bg-black"
-      style={{ transform: shown ? "translateX(0)" : "translateX(100%)", transition: "transform 300ms ease-in-out" }}
-    >
-      <div className="relative flex flex-none items-center justify-between" style={{ height: 52, padding: "9px 8px" }}>
-        <button type="button" onClick={onClose} aria-label="Close" style={{ width: 34, height: 34 }}>
-          <Img name="icon_edit_top_close" size={34} />
-        </button>
-        <span className="pointer-events-none absolute inset-x-0 text-center text-white" style={{ fontSize: 15, fontWeight: 600, lineHeight: "18px" }}>Saved!</span>
-        <button type="button" onClick={() => setShare(true)} aria-label="Share" style={{ width: 34, height: 34 }}>
-          <Img name="icon_edit_top_share_shadow" size={34} />
-        </button>
-      </div>
-      <div className="relative min-h-0 flex-1">
-        <img src={url} alt="" draggable={false} className="absolute inset-0 h-full w-full object-contain" />
-      </div>
-      <ShareBar open={share} blob={blob} onClose={() => setShare(false)} />
-    </div>
-  );
-}
-
-/**
- * main_share_etc_bar.xml, BLACK theme: transparent full-screen root (tap closes), 167dp #000 sheet,
- * 50dp close row with btn_close_default (27dp, white), app list (paddingH 18, 75dp cells, 54dp icon,
- * 10dp label 11.5dp below). Only installed apps are listed and "More" always is; on the web no
- * share-target app can receive the file directly, so the list is "More" (Web Share / download).
- */
-function ShareBar({ open, blob, onClose }: { open: boolean; blob: Blob; onClose: () => void }) {
-  const [mounted, setMounted] = useState(open);
-  const [up, setUp] = useState(false);
-  const listRef = useRef<HTMLDivElement>(null);
-  const [w, setW] = useState(360);
-  if (open && !mounted) setMounted(true);
-  useEffect(() => {
-    if (open) {
-      const r = requestAnimationFrame(() => setUp(true));
-      return () => cancelAnimationFrame(r);
-    }
-    const r = requestAnimationFrame(() => setUp(false));
-    const t = window.setTimeout(() => setMounted(false), 300);
-    return () => { cancelAnimationFrame(r); window.clearTimeout(t); };
-  }, [open]);
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setW(el.clientWidth));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [mounted]);
-  // back closes the share bar first
-  useBackHandler(onClose, open);
-  if (!mounted) return null;
-  const items = [{ icon: "btn_share_etc", label: "More" }];
-  const margin = Math.max(0, (w - 36 - 75 * items.length) / (items.length + 1));
-  const more = async () => {
-    const file = new File([blob], `B612_${Date.now()}.jpg`, { type: "image/jpeg" });
-    try {
-      if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file] }); return; }
-    } catch { return; }
-    download(blob);
-  };
-  return (
-    <div className="absolute inset-0 z-10" onClick={onClose}>
-      <div
-        className="absolute inset-x-0 bottom-0 bg-black"
-        style={{ height: 167, transform: up ? "translateY(0)" : "translateY(100%)", transition: "transform 300ms ease-in-out" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div ref={listRef} className="absolute inset-x-0 top-0 flex items-center" style={{ bottom: 50, padding: "0 18px" }}>
-          {items.map((it) => (
-            <button key={it.icon} type="button" onClick={() => void more()} className="flex flex-none flex-col items-center" style={{ width: 75, marginLeft: margin }}>
-              <Img name={it.icon} size={54} />
-              <span className="whitespace-pre-line text-center text-white" style={{ marginTop: 11.5, fontSize: 10, lineHeight: "12px", padding: 1 }}>{it.label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center" style={{ height: 50 }}>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ width: 27, height: 27 }}>
-            <Img name="btn_close_default" size={27} style={{ filter: "brightness(0) invert(1)" }} />
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

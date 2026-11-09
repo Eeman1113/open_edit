@@ -1,30 +1,18 @@
 "use client";
 
-// EPBorderFragment: Format (aspect ratio) / Color (fill) tabs.
+// Frame tab: pick a canvas ratio (Shape) and what fills the space around the photo (Fill: a colour from the palette,
+// the eyedropper or the colour wheel, or a blurred copy of the photo).
 import { useEffect, useRef, useState } from "react";
+import { Tabs, cx } from "@/components/ui";
 import { useEdit } from "../ctx";
 import { BORDER_COLORS, BORDER_RATIOS, type BorderFill, type Doc } from "../model";
-import { ControlRow, FeatureButton, FeatureList, Img } from "../ui";
+import { ColorChip, ControlRow, FeatureButton, HintPill, MENU, PanelArea, SwatchTool, TOP_H } from "../ui";
+import { RatioGlyph } from "./Tools";
 
-const isDark = (hex: string) => {
-  const n = parseInt(hex.slice(1), 16);
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  return (Math.max(r, g, b) + Math.min(r, g, b)) / 2 / 255 < 0.1;
-};
 const toHex = (r: number, g: number, b: number) => `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
 
-function Swatch({ color, selected, onClick }: { color: string; selected: boolean; onClick: () => void }) {
-  const dark = isDark(color);
-  return (
-    <button type="button" onClick={onClick} className="relative flex-none rounded-full" style={{ width: 32, height: 32, margin: "0 8.5px", background: color, boxShadow: dark ? "inset 0 0 0 1px #6f6f6f" : undefined }}>
-      {selected && !dark && <span className="absolute rounded-full" style={{ inset: 2, border: "2.5px solid #000000" }} />}
-      {selected && dark && <span className="absolute inset-0 rounded-full" style={{ border: "2px solid #ffffff" }} />}
-    </button>
-  );
-}
-
 export function BorderPanel() {
-  const { doc, setLive, commit, undo, redo, setOriginal, originalUrl, setTool, photoCanvas } = useEdit();
+  const { doc, setLive, commit, undo, setOriginal, originalUrl, setTool, photoCanvas } = useEdit();
   const [cat, setCat] = useState<"ratio" | "color">("color");
   const [picker, setPicker] = useState(false);
   const [pickerColor, setPickerColor] = useState<string | null>(() => (doc.border.fill?.type === "color" && doc.border.fill.source === "picker" ? doc.border.fill.color : null));
@@ -49,7 +37,7 @@ export function BorderPanel() {
       const p = g.getImageData(0, 0, 1, 1).data;
       return toHex(p[0], p[1], p[2]);
     };
-    // the preview rect is the whole frame; map to the photo area inside it when a border is shown
+    // the preview rect is the whole frame; map to the photo area inside it when a frame is shown
     const toPhoto = (x: number, y: number) => {
       const d0 = docRef.current, src = photoCanvas();
       if (!src || !d0.border.ratio || !d0.border.fill) return [x, y] as const;
@@ -80,48 +68,49 @@ export function BorderPanel() {
         onInput={(e) => setLive(withFill(doc, { type: "color", color: e.currentTarget.value.toUpperCase(), source: "palette" }))}
         onChange={(e) => { const c = e.currentTarget.value.toUpperCase(); setPaletteColor(c); commit(withFill(doc, { type: "color", color: c, source: "palette" })); }}
       />
-      <ControlRow undo={undo} redo={redo} onOriginal={setOriginal} />
-      <div className="absolute inset-x-0" style={{ bottom: 52, height: 134 }}>
-        <div className="absolute inset-x-0 top-0 flex items-center justify-center" style={{ height: 54 }}>
-          <button type="button" onClick={() => setCat("ratio")} style={{ fontSize: 15, color: cat === "ratio" ? "#ffffff" : "rgba(255,255,255,0.6)" }}>Format</button>
-          <button type="button" onClick={() => setCat("color")} style={{ fontSize: 15, marginLeft: 60, color: cat === "color" ? "#ffffff" : "rgba(255,255,255,0.6)" }}>Color</button>
+      <ControlRow undo={undo} onOriginal={setOriginal} />
+      {picker && (
+        <div className="pointer-events-none absolute inset-x-0 z-30 flex justify-center" style={{ top: TOP_H + 12 }}>
+          <HintPill text="Drag on the photo to pick a colour" />
+        </div>
+      )}
+      <PanelArea className="flex flex-col">
+        <div className="flex flex-none justify-center pt-3">
+          <Tabs look="segment" className="w-[220px]" items={[{ id: "ratio", label: "Shape" }, { id: "color", label: "Fill" }]} value={cat} onChange={setCat} />
         </div>
         {cat === "ratio" && (
-          <FeatureList count={BORDER_RATIOS.length} top={54}>
-            {BORDER_RATIOS.map((r) => (
-              <FeatureButton
-                key={r.label} icon={r.icon} label={r.label}
-                selected={!!b.ratio && b.ratio[0] === r.r[0] && b.ratio[1] === r.r[1]}
-                onClick={() => commit({ ...doc, border: { ratio: r.r, fill: fill ?? { type: "color", color: "#FFFFFF", source: "builtin" } } })}
-              />
-            ))}
-          </FeatureList>
-        )}
-        {cat === "color" && (
-          <div className="no-scrollbar absolute inset-x-0 flex items-center overflow-x-auto" style={{ top: 72, height: 32, padding: "0 9.5px" }}>
-            <button type="button" onClick={() => setPicker(true)} className="relative flex flex-none items-center justify-center rounded-full" style={{ width: 32, height: 32, margin: "0 8.5px", background: "#333333" }}>
-              <Img name="icon_edit_color_picker" size={32} />
-            </button>
-            <button type="button" onClick={() => paletteRef.current?.click()} className="relative flex-none" style={{ width: 32, height: 32, margin: "0 8.5px" }}>
-              <Img name="icon_edit_color_wheel" size={32} />
-            </button>
-            <button type="button" onClick={() => commit(withFill(doc, { type: "blur" }))} className="relative flex-none overflow-hidden rounded-full" style={{ width: 32, height: 32, margin: "0 8.5px" }}>
-              {originalUrl && <img src={originalUrl} alt="" className="h-full w-full object-cover" style={{ filter: "blur(3px)", transform: "scale(1.2)" }} />}
-              {fill?.type === "blur" && (
-                <>
-                  <span className="absolute inset-0 rounded-full" style={{ border: "2px solid #ffffff" }} />
-                  <span className="absolute rounded-full" style={{ inset: 2, border: "2px solid #000000" }} />
-                </>
-              )}
-            </button>
-            {pickerColor && <Swatch color={pickerColor} selected={selColor(pickerColor, "picker")} onClick={() => commit(withFill(doc, { type: "color", color: pickerColor, source: "picker" }))} />}
-            {paletteColor && <Swatch color={paletteColor} selected={selColor(paletteColor, "palette")} onClick={() => commit(withFill(doc, { type: "color", color: paletteColor, source: "palette" }))} />}
-            {BORDER_COLORS.map((c) => <Swatch key={c} color={c} selected={selColor(c, "builtin")} onClick={() => commit(withFill(doc, { type: "color", color: c, source: "builtin" }))} />)}
+          <div className="relative min-h-0 flex-1">
+            <div className="no-scrollbar absolute inset-0 flex items-center gap-1 overflow-x-auto px-3" style={{ justifyContent: "safe center" }}>
+              {BORDER_RATIOS.map((r) => (
+                <FeatureButton
+                  key={r.label} label={r.label} iconNode={<RatioGlyph ratio={r.r[0] === 0 ? 0 : r.r[0] / r.r[1]} />}
+                  selected={!!b.ratio && b.ratio[0] === r.r[0] && b.ratio[1] === r.r[1]}
+                  onClick={() => commit({ ...doc, border: { ratio: r.r, fill: fill ?? { type: "color", color: "#FFFFFF", source: "builtin" } } })}
+                />
+              ))}
+            </div>
           </div>
         )}
-      </div>
-      {/* view_dimmed (#CC000000) while the eyedropper is active */}
-      {picker && <div className="absolute inset-x-0 bottom-0" style={{ height: 186, background: "rgba(0,0,0,0.8)" }} onClick={() => setPicker(false)} />}
+        {cat === "color" && (
+          <div className="no-scrollbar flex min-h-0 flex-1 items-center gap-3 overflow-x-auto px-4">
+            <SwatchTool icon="pipette" label="Pick from the photo" active={picker} onClick={() => setPicker((v) => !v)} />
+            <SwatchTool icon="palette" label="Colour wheel" onClick={() => paletteRef.current?.click()} />
+            <button
+              type="button" aria-label="Blurred photo" aria-pressed={fill?.type === "blur"} onClick={() => commit(withFill(doc, { type: "blur" }))}
+              className="oe-press relative h-[30px] w-[30px] flex-none overflow-hidden rounded-full"
+              style={{ boxShadow: fill?.type === "blur" ? "0 0 0 2px var(--oe-panel), 0 0 0 4px var(--oe-fg)" : "inset 0 0 0 1px rgba(255,255,255,0.16)" }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {originalUrl && <img src={originalUrl} alt="" className="h-full w-full scale-125 object-cover blur-[3px]" />}
+            </button>
+            <span className="h-6 w-px flex-none bg-line" />
+            {pickerColor && <ColorChip color={pickerColor} selected={selColor(pickerColor, "picker")} onClick={() => commit(withFill(doc, { type: "color", color: pickerColor, source: "picker" }))} />}
+            {paletteColor && <ColorChip color={paletteColor} selected={selColor(paletteColor, "palette")} onClick={() => commit(withFill(doc, { type: "color", color: paletteColor, source: "palette" }))} />}
+            {BORDER_COLORS.map((c) => <ColorChip key={c} color={c} selected={selColor(c, "builtin")} onClick={() => commit(withFill(doc, { type: "color", color: c, source: "builtin" }))} />)}
+          </div>
+        )}
+      </PanelArea>
+      {picker && <div className={cx("absolute inset-x-0 bottom-0 z-30 bg-scrim")} style={{ height: MENU }} onClick={() => setPicker(false)} />}
     </>
   );
 }

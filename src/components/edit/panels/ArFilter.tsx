@@ -1,54 +1,18 @@
 "use client";
 
-// AR filter tab (EPContent.STICKER_ADD → EPStickerFragment, fragment_edit_photo_sticker_content.xml +
-// fragment_edit_photo_sticker_list_main.xml / fragment_edit_photo_sticker_list.xml / item_edit_photo_sticker_item.xml).
-// Categories: the camera's local starter set (src/data/camera/stickers.ts, same sticker JSON as the camera) and the
-// server overview, which is unreachable offline and keeps the original loading → network-error page with Retry
-// (same split as the camera StickerPanel). The picked sticker is rendered on the photo by the face engine in IMAGE
-// mode (faceEngine.ts FaceStage → FacePipeline stickers), in the preview and in the full-resolution SAVE.
+// Face FX tab: face-tracked AR stickers on the photo. The built-in set comes from the asset pack; a remote catalogue
+// is added when the content API provides one. The picked sticker is drawn by the face engine in still-image mode, in
+// the preview and in the full-size save.
 import { useEffect, useRef, useState } from "react";
-import { d } from "@/components/ui/legacy-drawable";
+import { Icon, Spinner, cx } from "@/components/ui";
 import { useBackHandler } from "@/lib/back";
 import { LOCAL_STICKER_CATEGORIES, fetchStickerCatalog, type Sticker, type StickerCategory } from "@/data/camera/stickers";
 import { useEdit } from "../ctx";
 import type { Doc } from "../model";
-import { ControlRow, EmptyState, Img, TitleBar } from "../ui";
+import { ChipRow, ControlRow, Dock, EditBar, EmptyState, ToolChip } from "../ui";
 import { detectFaces, ensureFaceAssets, preloadStickerPreview } from "../tools/portrait/faceEngine";
 
-const AR_ERROR = "You are not connected to a network. Please check your network settings and try again.";
-/** Server overview placeholder (its categories are unknown offline): CategoryTabAdapter's error drawable. */
-const SERVER_CATEGORY: StickerCategory = { id: -1, icon: "sticker_navigation_error", grayIcon: "sticker_navigation_error_off", stickers: [], server: true };
-
-/** progressBarStyleSmall (16dp, white indeterminate). */
-function SmallSpinner({ size = 16 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 16 16" width={size} height={size} style={{ animation: "b612-ar-spin 1s linear infinite" }}>
-      <circle cx="8" cy="8" r="6.5" fill="none" stroke="#ffffff" strokeWidth="1.5" strokeDasharray="28 41" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** EditContentLoadingView (view_edit_content_loading.xml): 13dp white text over a 16dp spinner. */
-function ContentLoading({ text, space = 0 }: { text: string; space?: number }) {
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center">
-      <span className="text-white" style={{ fontSize: 13, lineHeight: "15px" }}>{text}</span>
-      <span style={{ marginTop: space }}><SmallSpinner /></span>
-    </div>
-  );
-}
-
-/** StickerDownloadProgressView (20dp): #40ffffff ring + rotating white arc while the resources load. */
-function DownloadProgress() {
-  const r = 8.5, c = 2 * Math.PI * r;
-  return (
-    <svg viewBox="0 0 20 20" width={20} height={20}>
-      <circle cx="10" cy="10" r={r} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-      <circle cx="10" cy="10" r={r} fill="none" stroke="#ffffff" strokeWidth="1.5" strokeDasharray={`${(c * 300) / 360} ${c}`} style={{ transformOrigin: "10px 10px", animation: "b612-ar-spin 1s linear infinite" }} />
-    </svg>
-  );
-}
-
+const SHEET_H = 300;
 const withSticker = (d0: Doc, id: number | null): Doc => ({
   ...d0,
   beauty: { ...d0.beauty, face: { ...(d0.beauty.face ?? { f: {} }), sticker: id } },
@@ -56,47 +20,31 @@ const withSticker = (d0: Doc, id: number | null): Doc => ({
 
 export function ArFilterPanel({ onExit }: { onExit: () => void }) {
   const { doc, setLive, commit, setOriginal, bases } = useEdit();
-  // the doc as it was when the page opened: ✓ commits the pick onto it, ✕ drops it
+  // the doc as it was when the page opened: Apply commits the pick onto it, Cancel drops it
   const [saved] = useState(doc);
   const savedId = saved.beauty.face?.sticker ?? null;
   const [selectedId, setSelectedId] = useState<number | null>(savedId);
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [catIdx, setCatIdx] = useState(0);
-  const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
-  const [serverCats, setServerCats] = useState<StickerCategory[]>([]);
-  const [attempt, setAttempt] = useState(0);
-  const [width, setWidth] = useState(360);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const [remote, setRemote] = useState<StickerCategory[]>([]);
+  const [noFace, setNoFace] = useState(false);
   const seq = useRef(0);
 
-  // StickerOverview load (server categories); offline it fails and only their pages show the error page.
+  // remote categories, when a catalogue is configured (offline there are none and only the built-in set shows)
   useEffect(() => {
     let alive = true;
-    fetchStickerCatalog()
-      .then((c) => { if (alive) { setServerCats(c); setPhase("ready"); } })
-      .catch(() => { if (alive) setPhase("error"); });
+    fetchStickerCatalog().then((c) => { if (alive) setRemote(c); }).catch(() => undefined);
     return () => { alive = false; };
-  }, [attempt]);
-
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
-    ro.observe(el);
-    return () => ro.disconnect();
   }, []);
 
-  // face detection starts with the page (the sticker needs the landmarks of the photo)
+  // face detection starts with the page (stickers need the face landmarks)
   useEffect(() => {
     const base = bases.current[saved.base];
-    if (base) void detectFaces(base).catch(() => undefined);
+    if (base) void detectFaces(base).then((d) => setNoFace(!d.faces.length)).catch(() => undefined);
   }, [bases, saved.base]);
 
-  const cats: StickerCategory[] = [...LOCAL_STICKER_CATEGORIES, ...(serverCats.length ? serverCats : [SERVER_CATEGORY])];
+  const cats: StickerCategory[] = [...LOCAL_STICKER_CATEGORIES, ...remote];
   const cat = cats[Math.min(catIdx, cats.length - 1)];
-  const pagePhase = cat.server ? phase : "ready";
-  // fragment_edit_photo_sticker_list: columns = min(10, screenWidth / 70dp)
-  const cols = Math.max(1, Math.min(10, Math.floor(width / 70)));
 
   const apply = (id: number | null) => {
     const n = ++seq.current;
@@ -128,72 +76,52 @@ export function ArFilterPanel({ onExit }: { onExit: () => void }) {
     else setLive(null);
     onExit();
   };
-
-  // back = ✕ (EPStickerFragment.onBackPressed: drops the pick and closes the page)
   useBackHandler(close);
 
   return (
     <>
-      {/* container_control (54dp): btn_original at the right */}
-      <ControlRow bottom={52 + 255} onOriginal={setOriginal}>
-        <span className="flex-1" />
+      <ControlRow bottom={SHEET_H} onOriginal={setOriginal}>
+        {noFace && <span className="mx-auto rounded-full bg-glass px-3 py-1.5 text-[12px] font-medium text-white backdrop-blur-md">No face found: face filters need one</span>}
       </ControlRow>
-      {/* list page container_feature: 255dp, #E6171717, above the 52dp bottom bar */}
-      <div ref={rootRef} data-ar-panel className="absolute inset-x-0" style={{ bottom: 52, height: 255, background: "rgba(23,23,23,0.9)" }}>
-        {/* header (guide_option 43dp): btn_sticker_off + container_category (btn_search over list_category) */}
-        <div className="absolute inset-x-0 top-0 flex items-center" style={{ height: 43 }}>
-          <button type="button" onClick={() => apply(null)} className="relative flex h-full flex-none items-center" style={{ width: 49.5 }} aria-label="none">
-            <Img name="icon_sticker_none" size={35} style={{ marginLeft: 6 }} />
-            <span className="absolute right-0" style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)" }} />
+      <EditBar title="Face FX" onClose={close} onConfirm={confirm} />
+      <Dock height={SHEET_H} className="flex flex-col">
+        <div className="flex flex-none items-center gap-2 pl-3 pt-3">
+          <button
+            type="button" aria-label="No filter" aria-pressed={selectedId == null} onClick={() => apply(null)}
+            className={cx("oe-press flex h-9 w-9 flex-none items-center justify-center rounded-full", selectedId == null ? "bg-fg text-bg" : "bg-raised text-fg-2")}
+          >
+            <Icon name="block" size={18} />
           </button>
-          <div className="relative flex h-full min-w-0 flex-1 items-center">
-            {/* list_category: paddingStart 47.5 (room for btn_search), paddingEnd 8, LinearItemDecoration 5dp */}
-            <div className="no-scrollbar flex h-full min-w-0 flex-1 items-center overflow-x-auto" style={{ paddingLeft: 47.5, paddingRight: 8, gap: 5 }}>
-              {cats.map((c, i) => {
-                const on = c === cat;
-                const icon = (on ? c.icon : c.grayIcon ?? c.icon) ?? "sticker_default_category";
+          <span className="h-6 w-px flex-none bg-line" />
+          <ChipRow className="pl-1 pr-3">
+            {cats.map((c, i) => <ToolChip key={c.id} label={c.text ?? `Set ${i + 1}`} selected={c === cat} onClick={() => setCatIdx(i)} />)}
+          </ChipRow>
+        </div>
+        <div className="no-scrollbar relative mt-3 min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+          {cat.stickers.length ? (
+            <div className="grid grid-cols-4 gap-2.5">
+              {cat.stickers.map((s) => {
+                const selected = s.id === selectedId;
                 return (
-                  <button key={c.id} type="button" data-cat={c.id} onClick={() => setCatIdx(i)} className="flex h-full flex-none items-center justify-center" style={{ width: 35 }}>
-                    <img src={d(icon)} alt="" style={{ width: 35, height: 35, objectFit: "contain", opacity: on || c.grayIcon !== c.icon ? 1 : 0.4 }} draggable={false} />
+                  <button
+                    key={s.id} type="button" data-sticker={s.id} onClick={() => onSelect(s)} aria-pressed={selected}
+                    className="oe-press flex flex-col items-center gap-1"
+                  >
+                    <span className={cx("relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-md bg-raised", selected && "ring-2 ring-accent ring-offset-2 ring-offset-panel")}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={s.thumbnail} alt="" className="h-[78%] w-[78%] object-contain" draggable={false} />
+                      {loadingId === s.id && <span className="absolute inset-0 flex items-center justify-center bg-bg/50"><Spinner size={20} className="text-accent" /></span>}
+                    </span>
+                    {s.name && <span className={cx("w-full truncate text-center text-[11px] font-medium", selected ? "text-fg" : "text-fg-2")}>{s.name}</span>}
                   </button>
                 );
               })}
             </div>
-            <button type="button" className="absolute flex-none" style={{ left: 7.5 }} aria-label="Search">
-              <Img name="icon_sticker_tab_search" size={35} />
-            </button>
-          </div>
-        </div>
-
-        {/* pager_sticker (below guide_option) */}
-        <div className="absolute inset-x-0 bottom-0" style={{ top: 43 }} key={`${cat.id}|${attempt}`}>
-          {pagePhase === "ready" && (cat.stickers.length ? (
-            <div className="no-scrollbar h-full overflow-y-auto" style={{ padding: "4.5px 6px" }}>
-              <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-                {cat.stickers.map((s) => {
-                  const selected = s.id === selectedId;
-                  return (
-                    <div key={s.id} className="flex justify-center">
-                      {/* item_edit_photo_sticker_item: 63dp square, 54dp fitCenter thumbnail, view_selected ring, 20dp progress */}
-                      <button type="button" data-sticker={s.id} onClick={() => onSelect(s)} className="relative flex-none" style={{ width: 63, height: 63 }}>
-                        <img src={s.thumbnail.includes("/") ? s.thumbnail : d(s.thumbnail)} alt="" className="absolute" style={{ left: 4.5, top: 4.5, width: 54, height: 54, objectFit: "contain" }} draggable={false} />
-                        {selected && <img src={d("icon_edit_sticker_select")} alt="" className="absolute inset-0" style={{ width: 63, height: 63 }} draggable={false} />}
-                        {loadingId === s.id && <span className="absolute" style={{ right: 4.5 + 2, bottom: 4.5 + 2, width: 20, height: 20 }}><DownloadProgress /></span>}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           ) : (
-            <EmptyState text="There is no registered sticker." />
-          ))}
-          {pagePhase === "loading" && <ContentLoading text="Downloading stickers…" />}
-          {pagePhase === "error" && <EmptyState text={AR_ERROR} onRetry={() => { setPhase("loading"); setAttempt((a) => a + 1); }} />}
+            <EmptyState text="Nothing in this set yet." icon="sticker" />
+          )}
         </div>
-      </div>
-      <TitleBar title="AR filter" onClose={close} onConfirm={confirm} />
-      <style>{`@keyframes b612-ar-spin { to { transform: rotate(360deg) } }`}</style>
+      </Dock>
     </>
   );
 }

@@ -1,15 +1,15 @@
 "use client";
 
-// EPCutoutFragment (fragment_edit_photo_tools_cutout.xml): Outline / Brush / Eraser over a selection mask.
-// The ImageSeg TFLite is replaced by the MediaPipe Interactive Segmenter (magic_touch, src/lib/ai): an outline
-// loop is snapped to the subject inside it, and a tap in Outline mode selects the subject under the finger.
-// If the model finds nothing that fills the loop, the loop itself is used (as before).
+// Cutout: select the subject with Outline / Brush / Eraser. A loop drawn in Outline mode is snapped to the subject
+// inside it by the MediaPipe interactive segmenter (src/lib/ai), and a tap selects the subject under the finger; if
+// the model finds nothing that fills the loop, the loop itself is used. Apply keeps only the selection.
 import { useEffect, useRef, useState } from "react";
+import { TOKENS } from "@/components/ui";
 import { subjectAt, subjectInOutline } from "@/lib/ai";
 import { useEdit } from "../ctx";
-import { CtrlIcon, EditSeekBar, FeatureButton, Img, PRIMARY } from "../ui";
+import { ControlRow, EditSeekBar, FeatureButton } from "../ui";
 import {
-  copyCanvas, EditLoading, lerp, MENU, newCanvas, OptionRow, Panel, PhotoOverlay, strokeMask, TextTooltip,
+  copyCanvas, EditLoading, lerp, MENU, newCanvas, OPTION_H, OptionRow, Panel, PhotoOverlay, strokeMask, TextTooltip,
   useBake, useHold, usePhotoArea, useStrokeInput, useStrokes, useTimedTooltip, type MStroke, usePhotoSnapshot } from "./common";
 
 type Tool = "outline" | "brush" | "eraser";
@@ -42,7 +42,7 @@ export function CutoutTool() {
   const [size, setSize] = useState(0.5);
   const [live, setLive] = useState<MStroke | null>(null);
   const strokes = useStrokes<MStroke>();
-  const [tip] = useTimedTooltip("Draw the border you'd like to cut.", 3000);
+  const [tip] = useTimedTooltip("Draw around what you want to keep, or tap it", 3000);
   const r = (lerp(0.04, 0.3, size) * area.viewW) / 2 / Math.max(1, area.w);
 
   useEffect(() => {
@@ -56,10 +56,10 @@ export function CutoutTool() {
     const mg = m.getContext("2d")!;
     drawMask(mg, live && live.p?.tool !== "outline" ? [...strokes.visible, live] : strokes.visible, W, H);
     mg.globalCompositeOperation = "source-in";
-    mg.fillStyle = "rgba(11,212,210,0.45)"; mg.fillRect(0, 0, W, H);
+    mg.fillStyle = `${TOKENS.color.accent}73`; mg.fillRect(0, 0, W, H);
     g.drawImage(m, 0, 0);
     if (live?.p?.tool === "outline") {
-      g.save(); g.strokeStyle = PRIMARY; g.lineWidth = Math.max(2, W / 200); g.setLineDash([g.lineWidth * 3, g.lineWidth * 2]);
+      g.save(); g.strokeStyle = TOKENS.color.accent; g.lineWidth = Math.max(2, W / 200); g.setLineDash([g.lineWidth * 3, g.lineWidth * 2]);
       g.beginPath();
       for (let i = 0; i < live.pts.length; i += 2) (i ? g.lineTo : g.moveTo).call(g, live.pts[i] * W, live.pts[i + 1] * H);
       g.stroke(); g.restore();
@@ -85,7 +85,7 @@ export function CutoutTool() {
   });
 
   const confirm = () => {
-    if (!strokes.visible.length) { toast("No image to bring.\nSelect the area you’d like to cut out."); return; }
+    if (!strokes.visible.length) { toast("Select something to cut out first."); return; }
     bake((base) => {
       const out = copyCanvas(base);
       const m = newCanvas(out.width, out.height);
@@ -101,25 +101,17 @@ export function CutoutTool() {
   return (
     <>
       <PhotoOverlay area={area} canvasRef={canvasRef} hidden={held} />
-      {busy && <EditLoading />}
-      <TextTooltip text={tip} bottom={MENU + 108} />
-      <div className="absolute inset-x-0 z-20 flex items-center" style={{ bottom: MENU + 54, height: 54 }} onPointerDown={(e) => e.stopPropagation()}>
-        {touched && <CtrlIcon name="undo" enabled={strokes.undo.can} onClick={strokes.undo.on} style={{ marginLeft: 10 }} />}
-        {touched && <CtrlIcon name="redo" enabled={strokes.redo.can} onClick={strokes.redo.on} style={{ marginLeft: 10 }} />}
-        <span className="flex-1" />
-        <button type="button" style={{ width: 34, height: 34, marginRight: 10, touchAction: "none" }}
-          onPointerDown={() => hold(true)} onPointerUp={() => hold(false)} onPointerLeave={() => hold(false)} onPointerCancel={() => hold(false)}>
-          <Img name="icon_edit_common_original_cutout" size={34} />
-        </button>
-      </div>
-      <OptionRow bottom={MENU} label="Size">
-        <EditSeekBar style={{ marginLeft: 10, marginRight: 52 }} value={size} min={0.01} max={1} def={0.5} onChange={setSize} />
+      {busy && <EditLoading text="Finding the subject…" />}
+      <TextTooltip text={tip} bottom={MENU + OPTION_H + 56} />
+      <ControlRow bottom={MENU + OPTION_H} undo={touched ? strokes.undo : undefined} redo={touched ? strokes.redo : undefined} onOriginal={hold} />
+      <OptionRow bottom={MENU} label="Brush size">
+        <EditSeekBar value={size} min={0.01} max={1} def={0.5} onChange={setSize} />
       </OptionRow>
       <Panel title="Cutout" onClose={() => openSub(null)} onConfirm={confirm}>
-        <div className="absolute inset-x-0 flex justify-center" style={{ top: 36, gap: 44 }}>
-          <FeatureButton icon="edit_tab_cutout" label="Outline" selected={tool === "outline"} onClick={() => setTool("outline")} />
-          <FeatureButton icon="edit_icon_makeup_tint" label="Brush" selected={tool === "brush"} onClick={() => setTool("brush")} />
-          <FeatureButton icon="edit_tab_eraser" label="Eraser" selected={tool === "eraser"} onClick={() => setTool("eraser")} />
+        <div className="flex h-full items-center justify-center gap-3">
+          <FeatureButton icon="cutout" label="Outline" selected={tool === "outline"} onClick={() => setTool("outline")} />
+          <FeatureButton icon="brush" label="Add" selected={tool === "brush"} onClick={() => setTool("brush")} />
+          <FeatureButton icon="remove" label="Remove" selected={tool === "eraser"} onClick={() => setTool("eraser")} />
         </div>
       </Panel>
     </>

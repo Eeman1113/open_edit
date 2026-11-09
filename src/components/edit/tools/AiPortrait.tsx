@@ -1,18 +1,15 @@
 "use client";
 
 // Portrait pages backed by on-device AI (src/lib/ai):
-// - HD Skin (fragment_edit_photo_portrait_hdskin.xml): the server skin GAN is replaced by Real-ESRGAN face
-//   restoration + guided-filter skin smoothing on the face-skin mask; the slider (default 0.8) blends it in.
-// - Hair color (fragment_edit_photo_portrait_hair_color*.xml): MediaPipe hair mask + recolor, texture slider and
-//   the "Hair area correction" brush. Colours are server content, so a local list is used.
-// - AI Hair (fragment_edit_photo_portrait_ai_hair.xml): hairstyle generation is server-only; original
-//   unavailable state (network error retry) is kept.
+// - Skin detail: Real-ESRGAN face restoration plus edge-aware smoothing on the skin mask; the slider blends it in.
+// - Hair colour: MediaPipe hair mask and recolouring, a texture slider and a brush to correct the hair area.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon, Tabs, TOKENS } from "@/components/ui";
 import { hdSkinCanvas, HAIR_COLORS, photoFaces, recolorHair, refineMask } from "@/lib/ai";
 import { useEdit } from "../ctx";
-import { CtrlIcon, EditSeekBar, FeatureButton, Img, ThumbItem, Tint, WHITE60 } from "../ui";
+import { ControlRow, EditSeekBar, EmptyState, FeatureButton, SliderRow, ThumbItem } from "../ui";
 import {
-  AiLoading, BrushRing, copyCanvas, EditLoading, lerp, MENU, newCanvas, Panel, PhotoOverlay, RetryView, S, strokeMask,
+  AiLoading, BrushRing, copyCanvas, EditLoading, lerp, MENU, newCanvas, OPTION_H, OptionRow, Panel, PhotoOverlay, RetryView, S, strokeMask,
   TextTooltip, useHold, usePhotoArea, useStrokeInput, useStrokes, useTimedTooltip, type MStroke } from "./common";
 import { useAiJob, useAsyncBake, useBase } from "./aiCommon";
 
@@ -21,25 +18,7 @@ const shrink = (c: HTMLCanvasElement, max = 900) => {
   const k = Math.min(1, max / Math.max(c.width, c.height));
   return k < 1 ? copyCanvas(c, Math.round(c.width * k), Math.round(c.height * k)) : c;
 };
-
-/** EditContentNetworkErrorView: error icon + "Retry" pill. */
-function NetworkError({ onRetry, top = 0, bottom = 52 }: { onRetry: () => void; top?: number; bottom?: number }) {
-  return (
-    <div className="absolute inset-x-0 flex flex-col items-center justify-center" style={{ top, bottom }}>
-      <Img name="gallery_edit_frame_error" size={40} />
-      <button type="button" onClick={onRetry} className="text-white" style={{ marginTop: 10, height: 31, padding: "0 14px", borderRadius: 16, fontSize: 13, background: "rgba(255,255,255,0.15)" }}>{S.retry}</button>
-    </div>
-  );
-}
-
-function ControlBar({ bottom = MENU, children, original, hold }: { bottom?: number; children?: React.ReactNode; original: boolean; hold: (d: boolean) => void }) {
-  return (
-    <div className="absolute inset-x-0 z-20 flex items-center" style={{ bottom, height: 54 }} onPointerDown={(e) => e.stopPropagation()}>
-      <div className="relative flex min-w-0 flex-1 items-center">{children}</div>
-      <CtrlIcon name="original" enabled={original} onHold={hold} style={{ marginRight: 10 }} />
-    </div>
-  );
-}
+const ACCENT_RGB = [parseInt(TOKENS.color.accent.slice(1, 3), 16), parseInt(TOKENS.color.accent.slice(3, 5), 16), parseInt(TOKENS.color.accent.slice(5, 7), 16)];
 
 /* ------------------------------------------------------------------ HD Skin */
 
@@ -97,48 +76,26 @@ export function HdSkinPage() {
   return (
     <>
       {res && <PhotoOverlay area={area} canvasRef={canvasRef} hidden={held} />}
-      <ControlBar original={!!res} hold={hold} />
-      {baking && <EditLoading />}
+      <ControlRow onOriginal={hold} originalEnabled={!!res} />
+      {baking && <EditLoading text="Rendering full size…" />}
       {failed && !job.busy && <RetryView text={S.networkTry} onRetry={() => { setFailed(false); setAttempt((n) => n + 1); }} />}
-      <Panel title="HD Skin" guide onClose={() => openSub(null)} onConfirm={() => void confirm()}>
-        <div className="absolute inset-x-0 top-0 flex items-center" style={{ bottom: 52 }}>
-          <EditSeekBar style={{ margin: "0 68px" }} value={value} min={0} max={1} def={0.8} disabled={!res} onChange={setValue} />
+      <Panel title="Skin detail" onClose={() => openSub(null)} onConfirm={() => void confirm()}>
+        <div className="flex h-full flex-col justify-center gap-2">
+          <SliderRow label="Strength" value={Math.round(value * 100)}>
+            <EditSeekBar value={value} min={0} max={1} def={0.8} level={false} disabled={!res} onChange={setValue} />
+          </SliderRow>
+          <p className="px-6 text-center text-[12px] leading-snug text-fg-3">Restores fine skin detail and evens texture. It runs on your device.</p>
         </div>
       </Panel>
-      {job.pct !== null && <AiLoading text={stage === "prep" ? "Preparing effect" : `Loading…\n${job.pct}%`} onCancel={() => { job.cancel(); openSub(null); }} />}
-    </>
-  );
-}
-
-/* ------------------------------------------------------------------ AI Hair (server hairstyles: unavailable) */
-
-export function AiHairPage() {
-  const { openSub } = useEdit();
-  const [, hold] = useHold();
-  const [tip] = useTimedTooltip("Apply to a photo with one person.", 2500);
-  const [k, setK] = useState(0);
-  return (
-    <>
-      <TextTooltip text={tip} />
-      <ControlBar original={false} hold={hold} />
-      <Panel title="AI Hair" guide onClose={() => openSub(null)} onConfirm={() => openSub(null)}>
-        <button type="button" className="absolute left-0 top-0 flex items-center justify-center" style={{ width: 55, height: 55 }}>
-          <Tint name="icon_sticker_tab_none" size={35} color="#ffffff" />
-        </button>
-        <NetworkError key={k} top={0} onRetry={() => setK((n) => n + 1)} />
-      </Panel>
+      {job.pct !== null && <AiLoading text={stage === "prep" ? "Finding faces\n0%" : `Restoring detail\n${job.pct}%`} onCancel={() => { job.cancel(); openSub(null); }} />}
     </>
   );
 }
 
 /* ------------------------------------------------------------------ Hair color */
 
-/** Hair-colour thumbnail: the colour as a strand-shaded swatch on #242424 (server thumbnails aren't available). */
-function Swatch({ color }: { color: string }) {
-  return (
-    <span className="mt-[9px] block rounded-full" style={{ width: 37, height: 37, background: `radial-gradient(circle at 35% 30%, rgba(255,255,255,0.45), rgba(255,255,255,0) 45%), linear-gradient(160deg, ${color}, ${color} 55%, rgba(0,0,0,0.55))`, boxShadow: `0 0 0 1px rgba(255,255,255,0.08)` }} />
-  );
-}
+/** Hair colour swatch: the colour with a soft sheen. */
+const hairBg = (color: string) => `radial-gradient(circle at 32% 28%, rgba(255,255,255,0.5), rgba(255,255,255,0) 42%), linear-gradient(160deg, ${color}, ${color} 55%, rgba(0,0,0,0.55))`;
 
 export function HairColorPage() {
   const { openSub } = useEdit();
@@ -206,10 +163,10 @@ export function HairColorPage() {
         const m = newCanvas(pv.width, pv.height);
         const mg = m.getContext("2d")!;
         const id = new ImageData(pv.width, pv.height);
-        for (let i = 0; i < alpha.length; i++) { id.data[i * 4] = 11; id.data[i * 4 + 1] = 212; id.data[i * 4 + 2] = 210; id.data[i * 4 + 3] = alpha[i] * 128; }
+        for (let i = 0; i < alpha.length; i++) { id.data[i * 4] = ACCENT_RGB[0]; id.data[i * 4 + 1] = ACCENT_RGB[1]; id.data[i * 4 + 2] = ACCENT_RGB[2]; id.data[i * 4 + 3] = alpha[i] * 128; }
         mg.putImageData(id, 0, 0);
         g.drawImage(m, 0, 0);
-        if (live) strokeMask(g, live, c.width, c.height, 0.2, live.erase ? "rgba(255,255,255,0.35)" : "rgba(11,212,210,0.5)");
+        if (live) strokeMask(g, live, c.width, c.height, 0.2, live.erase ? "rgba(255,255,255,0.35)" : `${TOKENS.color.accent}80`);
       }
     });
     return () => cancelAnimationFrame(raf);
@@ -224,7 +181,7 @@ export function HairColorPage() {
     setBaking(true);
     await new Promise((r) => setTimeout(r, 50));
     await asyncBake(async (base) => {
-      // refine the mask at <= 1600 px, then recolor at full resolution
+      // refine the mask at <= 1600 px, then recolour at full resolution
       const work = shrink(base, 1600);
       const editsW = edits ? copyCanvas(edits, work.width, work.height) : null;
       const a = refineMask(work, hair, editsW);
@@ -255,20 +212,17 @@ export function HairColorPage() {
         <PhotoOverlay area={area} canvasRef={canvasRef} hidden={held}>
           <BrushRing at={ring} r={fixR * area.w} />
         </PhotoOverlay>
-        <div className="absolute inset-x-0 z-20 flex items-center" style={{ bottom: MENU + 54, height: 54 }} onPointerDown={(e) => e.stopPropagation()}>
-          <CtrlIcon name="undo" enabled={fixStrokes.undo.can} onClick={fixStrokes.undo.on} style={{ marginLeft: 10 }} />
-          <CtrlIcon name="redo" enabled={fixStrokes.redo.can} onClick={fixStrokes.redo.on} style={{ marginLeft: 10 }} />
-          <span className="flex-1" />
-          <CtrlIcon name="original" enabled onHold={hold} style={{ marginRight: 10 }} />
-        </div>
-        <div className="absolute inset-x-0 z-20 flex items-center" style={{ bottom: MENU, height: 54, background: "rgba(0,0,0,0.4)" }} onPointerDown={(e) => e.stopPropagation()}>
-          <span className="flex-none text-white" style={{ marginLeft: 20, fontSize: 13 }}>Size</span>
-          <EditSeekBar style={{ marginLeft: 24, marginRight: 52 }} value={fixSize} min={0.01} max={1} def={0.5} onChange={setFixSize} />
-        </div>
-        <Panel title="Hair area correction" onConfirm={() => setFix(false)}>
-          <div className="absolute inset-x-0 flex justify-center" style={{ top: 36, gap: 52 }}>
-            <FeatureButton icon="edit_icon_makeup_tone" label="Brush" selected={fixTool === "brush"} onClick={() => setFixTool("brush")} />
-            <FeatureButton icon="edit_tab_eraser" label="Eraser" selected={fixTool === "eraser"} onClick={() => setFixTool("eraser")} />
+        <ControlRow bottom={MENU + OPTION_H} undo={fixStrokes.undo} redo={fixStrokes.redo} onOriginal={hold} />
+        <OptionRow bottom={MENU} label="Brush size">
+          <EditSeekBar value={fixSize} min={0.01} max={1} def={0.5} onChange={setFixSize} />
+        </OptionRow>
+        <Panel title="Fix hair area" onConfirm={() => setFix(false)}>
+          <div className="flex h-full flex-col items-center justify-center gap-3">
+            <div className="flex gap-3">
+              <FeatureButton icon="brush" label="Add hair" selected={fixTool === "brush"} onClick={() => setFixTool("brush")} />
+              <FeatureButton icon="remove" label="Remove" selected={fixTool === "eraser"} onClick={() => setFixTool("eraser")} />
+            </div>
+            <p className="text-[12px] text-fg-3">Paint where the colour should or shouldn&apos;t go</p>
           </div>
         </Panel>
       </>
@@ -279,52 +233,40 @@ export function HairColorPage() {
     <>
       {ready && <PhotoOverlay area={area} canvasRef={canvasRef} hidden={held} />}
       <TextTooltip text={tip} />
-      {(state === "loading" || baking) && <EditLoading />}
-      <ControlBar original={ready && (!!color || texture > 0)} hold={hold} bottom={MENU + (sliderShown ? 75 : 0)} />
+      {(state === "loading" || baking) && <EditLoading text={baking ? "Rendering full size…" : "Finding hair…"} />}
+      <ControlRow bottom={MENU + (sliderShown ? OPTION_H : 0)} onOriginal={hold} originalEnabled={ready && (!!color || texture > 0)} />
       {sliderShown && color && (
-        <div className="absolute inset-x-0 z-20" style={{ bottom: MENU, padding: "17.5px 0", background: "rgba(0,0,0,0.4)" }} onPointerDown={(e) => e.stopPropagation()}>
-          <div className="flex items-center" style={{ height: 40 }}>
-            <span className="flex-none truncate text-white" style={{ marginLeft: 20, width: 80, fontSize: 13 }}>Opacity</span>
-            <EditSeekBar style={{ marginLeft: 24, marginRight: 52 }} value={strength} min={0} max={1} def={HAIR_COLORS.find((h) => h.color === color)?.def ?? 0.7} onChange={(v) => setOpacity((o) => ({ ...o, [color]: v }))} />
-          </div>
-        </div>
+        <OptionRow bottom={MENU} label="Strength">
+          <EditSeekBar value={strength} min={0} max={1} def={HAIR_COLORS.find((h) => h.color === color)?.def ?? 0.7} onChange={(v) => setOpacity((o) => ({ ...o, [color]: v }))} />
+        </OptionRow>
       )}
-      <Panel
-        onClose={() => openSub(null)} onConfirm={() => void confirm()}
-        title={(
-          <div className="flex items-center" style={{ gap: 60 }}>
-            <button type="button" onClick={() => setPage("recolor")} style={{ fontSize: 15, color: page === "recolor" ? "#ffffff" : WHITE60 }}>Hair color</button>
-            <button type="button" onClick={() => setPage("texture")} style={{ fontSize: 15, color: page === "texture" ? "#ffffff" : WHITE60 }}>Hair texture</button>
+      <Panel title="Hair colour" onClose={() => openSub(null)} onConfirm={() => void confirm()}>
+        <div className="flex h-full flex-col justify-center gap-3">
+          <div className="flex items-center gap-2 px-4">
+            <Tabs look="segment" className="flex-1" items={[{ id: "recolor", label: "Colour" }, { id: "texture", label: "Shine" }]} value={page} onChange={setPage} />
+            <button
+              type="button" onClick={() => { if (ready) setFix(true); else if (state === "noface") setTip(S.noFace); }}
+              className="oe-press flex h-10 flex-none items-center gap-1.5 rounded-full bg-raised px-3 text-[13px] font-semibold disabled:opacity-40" disabled={!ready && state !== "noface"}
+            >
+              <Icon name="brush" size={15} className="text-accent" />Fix area
+            </button>
           </div>
-        )}
-      >
-        <div className="absolute inset-x-0 top-0" style={{ height: 134 }}>
           {page === "recolor" ? (
-            <>
-              <button type="button" onClick={() => pickColor(null)} className="absolute left-0 top-0 flex items-center bg-black" style={{ width: 56.5, height: 55 }}>
-                <Img name="icon_sticker_none" size={35} style={{ marginLeft: 15, opacity: color ? 0.5 : 1 }} />
-                <span className="absolute right-0" style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)" }} />
-              </button>
-              {state === "error" ? (
-                <div className="absolute" style={{ left: 0, right: 58, top: 0, bottom: 0 }}><NetworkError onRetry={() => { setState("loading"); setAttempt((n) => n + 1); }} top={0} bottom={0} /></div>
-              ) : (
-                <div className="no-scrollbar absolute flex overflow-x-auto" style={{ left: 0, right: 58, top: 55, height: 73, paddingLeft: 15, paddingRight: 15, gap: 4 }}>
-                  {HAIR_COLORS.map((h) => (
-                    <ThumbItem key={h.id} label={h.label} bg="#242424" iconNode={<Swatch color={h.color} />} selected={color === h.color} onClick={() => pickColor(h.color)} />
-                  ))}
-                </div>
-              )}
-            </>
+            state === "error" ? (
+              <div className="relative h-[86px]"><EmptyState text="Couldn't find the hair." onRetry={() => { setState("loading"); setAttempt((n) => n + 1); }} /></div>
+            ) : (
+              <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-4">
+                <ThumbItem size={56} label="None" none selected={!color} onClick={() => pickColor(null)} />
+                {HAIR_COLORS.map((h) => (
+                  <ThumbItem key={h.id} size={56} label={h.label} bg={hairBg(h.color)} selected={color === h.color} onClick={() => pickColor(h.color)} />
+                ))}
+              </div>
+            )
           ) : (
-            <div className="absolute left-0 top-0 flex items-center" style={{ right: 58, bottom: 0 }}>
-              <EditSeekBar style={{ margin: "0 40px" }} value={texture} min={0} max={1} def={0} disabled={!ready} onChange={setTexture} />
-            </div>
+            <SliderRow label="Shine" value={Math.round(texture * 100)} className="h-[86px]">
+              <EditSeekBar value={texture} min={0} max={1} def={0} level={false} disabled={!ready} onChange={setTexture} />
+            </SliderRow>
           )}
-          {/* btn_hair_fix "Correction" */}
-          <div className="absolute right-0 flex items-center bg-black" style={{ top: 27, width: 58, height: 79 }}>
-            <Img name="img_hair_shadow" size={[21, 79]} style={{ position: "absolute", left: -21, top: 0 }} />
-            <FeatureButton icon="beauty_icon_manual" label="Correction" disabled={!ready} onClick={() => { if (ready) setFix(true); else if (state === "noface") setTip(S.noFace); }} />
-          </div>
         </div>
       </Panel>
     </>

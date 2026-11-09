@@ -1,42 +1,36 @@
-// Video editor (EditActivity in video mode → VideoEditFragment, photoend_video_edit_fragment.xml) data model.
+// Video editor data model: tabs, limits, the edit document and the speed scale.
+import type { IconName } from "@/components/ui";
 import type { WarpOp } from "@/lib/face";
 
-/** VideoEditTabType, in VideoEditFeatureMenuAdapter order (Ad / NONE are not menu items). */
-export type TabId = "VideoEdit" | "Speed" | "Music" | "Reshape" | "Retouch" | "Filter" | "Effect" | "Frame";
+export type TabId = "VideoEdit" | "Speed" | "Music" | "Reshape" | "Retouch" | "Filter" | "Frame";
 
 export interface TabDef {
   id: TabId;
-  /** thumbnailResId */
-  icon: string;
-  /** title (gallery_end_video_menu_*) — used for accessibility; the bar shows icons only. */
+  icon: IconName;
   title: string;
-  /** editMenu (getTagName = "edit_video_" + editMenu) */
-  editMenu: string;
-  /** 2-depth fragment (two_depth_fragment_container) that covers the bottom menu. */
+  /** Opens a full tool page (with Cancel / Apply) instead of a panel. */
   twoDepth?: boolean;
 }
 
 export const TABS: TabDef[] = [
-  { id: "VideoEdit", icon: "edit_tab_cut", title: "Trim", editMenu: "trim" },
-  { id: "Speed", icon: "edit_tab_speed", title: "Speed", editMenu: "speed" },
-  { id: "Music", icon: "edit_tab_music", title: "Music", editMenu: "music" },
-  { id: "Reshape", icon: "icon_edit_video_tab_reshape", title: "Beauty", editMenu: "reshape", twoDepth: true },
-  { id: "Retouch", icon: "edit_tab_touchbeauty", title: "Reshape", editMenu: "retouch", twoDepth: true },
-  { id: "Filter", icon: "edit_tab_filter", title: "Filters", editMenu: "filter" },
-  { id: "Effect", icon: "edit_tab_effect", title: "Effects", editMenu: "effect_sticker" },
-  { id: "Frame", icon: "edit_tab_sticker", title: "AR filter", editMenu: "sticker" },
+  { id: "VideoEdit", icon: "cutout", title: "Trim" },
+  { id: "Speed", icon: "speed", title: "Speed" },
+  { id: "Filter", icon: "filter", title: "Filters" },
+  { id: "Frame", icon: "effects", title: "Face FX" },
+  { id: "Reshape", icon: "face", title: "Face shape", twoDepth: true },
+  { id: "Retouch", icon: "hand", title: "Liquify", twoDepth: true },
+  { id: "Music", icon: "music", title: "Music" },
 ];
 
-/** AbstractC14771e: max editable 5 min, min 1 s; frame cell = gallery_video_frame_list_height (54dp). */
+/** Longest editable section (5 min) and shortest (1 s); width of one strip frame in px. */
 export const MAX_MS = 5 * 60 * 1000;
 export const MIN_MS = 1000;
-export const FRAME = 54;
-/** photoend_video_edit_fragment: bottom_menu_guideline = video_edit_feature_tab_height (200dp), menu 52dp. */
-export const TAB_H = 200;
-export const MENU_H = 52;
-export const PRIMARY = "#0bd4d2";
+export const FRAME = 52;
+/** Dock height (panel + tab bar) and the tab bar's height. */
+export const DOCK_H = 216;
+export const TAB_H = 60;
 
-/** VideoSpeedSeekBar: min 0.25, default 1, max 4 (progress 0..4, center 2 = 1x). */
+/** Speed scale: 0.25x … 1x … 4x, mapped onto a 0..4 slider position with 1x in the middle. */
 export const SPEED = { min: 0.25, def: 1, max: 4 } as const;
 
 export type Rotation = 0 | 90 | 180 | 270;
@@ -53,15 +47,15 @@ export interface VDoc {
   end: number;
   speed: number;
   reverse: boolean;
-  /** top_sound_icon_btn selected = original sound off. */
+  /** Original sound off. */
   muted: boolean;
   rotation: Rotation;
   filter: { key: string; strength: number };
-  /** AR filter (Frame tab) sticker id. */
+  /** Face FX (AR sticker) id. */
   stickerId: number | null;
-  /** Beauty (Reshape tab). */
+  /** Face shape values. */
   reshape: Reshape;
-  /** Reshape (Retouch tab): manual drag warps, face-anchored so they follow the face. */
+  /** Liquify: drag warps anchored to the face so they follow it. */
   retouch: WarpOp[];
 }
 
@@ -86,7 +80,7 @@ export function docModified(a: VDoc, durationMs: number): boolean {
     || a.filter.key !== "ORIGINAL" || a.stickerId !== null || reshapeActive(a.reshape) || a.retouch.length > 0;
 }
 
-/** i87.m125358a: floor to whole seconds, "mm:ss" (or "HH:mm:ss" from one hour). */
+/** Whole seconds as "mm:ss" (or "hh:mm:ss" from one hour). */
 export function fmtDuration(ms: number): string {
   const s = Math.floor(Math.max(0, ms) / 1000);
   const p = (n: number) => String(n).padStart(2, "0");
@@ -94,7 +88,7 @@ export function fmtDuration(ms: number): string {
   return h > 0 ? `${p(h)}:${p(m)}:${p(r)}` : `${p(m)}:${p(r)}`;
 }
 
-/** VideoSpeedSeekBar.m62246R: progress (0..4) → speed, rounded to 0.1 above 1x and 0.01 below. */
+/** Slider position (0..4) → speed, rounded to 0.1 above 1x and 0.01 below. */
 export function progressToSpeed(p: number): number {
   const half = 2;
   let f: number;
@@ -104,7 +98,7 @@ export function progressToSpeed(p: number): number {
   return Math.round(f * k) / k;
 }
 
-/** VideoSpeedSeekBar.m62249P: speed → progress. */
+/** Speed → slider position. */
 export function speedToProgress(s: number): number {
   const half = 2;
   if (s < SPEED.def) return half * ((s - SPEED.min) / (SPEED.def - SPEED.min));
@@ -112,10 +106,10 @@ export function speedToProgress(s: number): number {
   return half + (4 - half) * ((s - SPEED.def) / (SPEED.max - SPEED.def));
 }
 
-/** Kotlin Float.toString for the speed label ("1.0x", "0.25x", "2.5x"). */
-export const speedLabel = (s: number) => `${Number.isInteger(s) ? s.toFixed(1) : String(s)}x`;
+/** Speed label ("1x", "0.25x", "2.5x"). */
+export const speedLabel = (s: number) => `${String(s)}x`;
 
-/** CommonBrushSize: strength + UI size (dp). */
+/** Liquify brush sizes: warp strength and the dot size shown in the picker. */
 export const BRUSHES = [
   { strength: 0.125, size: 10 },
   { strength: 0.25, size: 14 },
@@ -125,33 +119,26 @@ export const BRUSHES = [
 ];
 
 export const STR = {
-  save: "SAVE",
-  chooseMusic: "Choose music",
-  tooltip5min: "You can edit up to 5 minutes of video.",
-  reverse: "Reverse",
-  reversePopup: "Setting Reverse…",
-  reverseMute: "Video sound is set to silent.",
-  reverseFail: "Reverse setting failed.",
-  saveTitle: "Saving video...",
-  saveSub: "Do not close B612 or switch to other apps.",
-  saveLongSub: "The video will take time to save due to the duration. Do not close B612 or switch to another app.",
-  saveFail: "Failed to save a video.",
-  exporting: "Exporting...",
-  leave: "Are you sure you want to leave without saving?",
-  leaveOk: "Leave",
-  cancel: "Cancel",
-  networkBar: "Not connected to network.",
-  retry: "Retry",
-  effectsTooltip: "Hold to apply",
-  store: "Store",
-  manualTooltip: "Tap and drag your finger to edit wherever you want!",
-  noFace: "No face was found.",
-  areaTooltip: "Only the selected face will be reshaped.",
-  faceCheck: "Loading face",
-  faceRetry: "Retry face recognition",
-  size: "Size",
-  musicNetwork: "You are not connected to network.\nPlease check your network settings and try again.",
-  addMusic: "Add Music",
-  unsupported: "This feature is not supported on your device.",
-  saved: "Saved!",
+  save: "Save",
+  tooltip5min: "Videos can be edited up to 5 minutes long.",
+  reverse: "Play backwards",
+  reversePopup: "Reversing the clip…",
+  reverseMute: "Sound is off while the clip plays backwards.",
+  reverseFail: "Couldn't reverse this clip.",
+  saveTitle: "Saving video…",
+  saveSub: "Keep this tab open until it's done.",
+  saveLongSub: "Longer videos take a while. Keep this tab open until it's done.",
+  saveFail: "Couldn't save the video. Please try again.",
+  exporting: "Preparing to share…",
+  leave: "You haven't saved this video yet. Leaving now throws the changes away.",
+  leaveTitle: "Discard your edits?",
+  leaveOk: "Discard",
+  cancel: "Keep editing",
+  manualTooltip: "Drag on a face to push it into shape",
+  noFace: "No face found in the video.",
+  faceCheck: "Looking for faces…",
+  faceRetry: "Look again",
+  size: "Brush size",
+  unsupported: "This browser can't run this tool.",
+  saved: "Saved",
 };

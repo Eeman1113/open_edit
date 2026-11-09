@@ -1,33 +1,33 @@
 "use client";
 
-// EPGenerativeFillFragment (fragment_edit_photo_tools_generative_fill.xml): ExpansionView + ratio list +
-// the 100–150% Ratio slider. The original's server generation (moon.snow.me fill/process) is replaced by
-// on-device MI-GAN outpainting (src/lib/ai outpaintCanvas: padded canvas, overlapping 512 px tiles).
-// Each "Create" is one result step (undo/redo); Confirm bakes the latest result as the new base.
+// Expand: grow the canvas past the photo's edges and let on-device MI-GAN outpainting fill the new area
+// (src/lib/ai outpaintCanvas: padded canvas, overlapping 512 px tiles). Each Generate is one result step with its own
+// undo / redo; Apply keeps the latest result.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { d } from "@/components/ui/legacy-drawable";
 import { outpaintCanvas } from "@/lib/ai";
 import { useEdit } from "../ctx";
-import { CtrlIcon, EditSeekBar, FeatureButton } from "../ui";
-import { AiLoading, clamp, copyCanvas, CreateButton, MENU, OptionRow, Panel, RetryView, TextTooltip, useHold, useTimedTooltip, usePhotoSnapshot } from "./common";
+import { ControlRow, EditSeekBar, FeatureButton, TOP_H } from "../ui";
+import { RatioGlyph } from "../panels/Tools";
+import { AiLoading, clamp, copyCanvas, CreateButton, MENU, OPTION_H, OptionRow, Panel, RetryView, TextTooltip, useHold, useTimedTooltip, usePhotoSnapshot } from "./common";
 import { aiStepText, useAiJob, useBase } from "./aiCommon";
 
-const ITEMS: { key: string; label: string; icon: string; r: number | null }[] = [
-  { key: "ratio", label: "Ratio", icon: "icon_edit_crop_ratio_original", r: null },
-  { key: "custom", label: "Free", icon: "icon_edit_crop_ratio_free", r: null },
-  { key: "square", label: "Square", icon: "icon_edit_crop_ratio_1_1", r: 1 },
-  { key: "4:5", label: "4:5", icon: "icon_edit_crop_ratio_4_5", r: 0.8 },
-  { key: "9:16", label: "9:16", icon: "icon_edit_crop_ratio_9_16", r: 0.5625 },
-  { key: "3:4", label: "3:4", icon: "icon_edit_crop_ratio_3_4", r: 0.75 },
-  { key: "16:9", label: "16:9", icon: "icon_edit_crop_ratio_16_9", r: 16 / 9 },
-  { key: "1:2", label: "1:2", icon: "icon_edit_crop_ratio_1_2", r: 0.5 },
-  { key: "2:3", label: "2:3", icon: "icon_edit_crop_ratio_2_3", r: 2 / 3 },
-  { key: "9:20", label: "9:20", icon: "icon_edit_crop_ratio_9_20", r: 0.45 },
-  { key: "3:2", label: "3:2", icon: "icon_edit_crop_ratio_3_2", r: 1.5 },
-  { key: "4:3", label: "4:3", icon: "icon_edit_crop_ratio_4_3", r: 4 / 3 },
-  { key: "5:4", label: "5:4", icon: "icon_edit_crop_ratio_5_4", r: 1.25 },
+const ITEMS: { key: string; label: string; r: number | null }[] = [
+  { key: "ratio", label: "Even", r: null },
+  { key: "custom", label: "Free", r: null },
+  { key: "square", label: "1:1", r: 1 },
+  { key: "4:5", label: "4:5", r: 0.8 },
+  { key: "9:16", label: "9:16", r: 0.5625 },
+  { key: "3:4", label: "3:4", r: 0.75 },
+  { key: "16:9", label: "16:9", r: 16 / 9 },
+  { key: "1:2", label: "1:2", r: 0.5 },
+  { key: "2:3", label: "2:3", r: 2 / 3 },
+  { key: "9:20", label: "9:20", r: 0.45 },
+  { key: "3:2", label: "3:2", r: 1.5 },
+  { key: "4:3", label: "4:3", r: 4 / 3 },
+  { key: "5:4", label: "5:4", r: 1.25 },
 ];
-const FAIL = "Creation failed.\nPlease wait a moment and try again.";
+const FAIL = "Couldn't fill the new area. Please try again.";
+const CHECKER = "repeating-conic-gradient(var(--oe-raised) 0% 25%, var(--oe-muted) 0% 50%) 0 0 / 20px 20px";
 
 /** Downscaled JPEG data URL for the ExpansionView image. */
 function previewUrl(c: HTMLCanvasElement) {
@@ -77,7 +77,7 @@ export function ExpandTool() {
   }, [sel, scale, free, fixed, item, aspect]);
   const expanded = ext.l + ext.t + ext.r + ext.b > 0.001;
 
-  // layout: fit the background rect into the canvas area with a 30dp (60dp Free) inset
+  // layout: fit the expanded canvas into the preview with a 30 px inset (60 px in Free, room for the handles)
   const inset = sel === "custom" ? 60 : 30;
   const bgW = 1 + ext.l + ext.r, bgH = (1 + ext.t + ext.b) / aspect;
   const k = Math.min((view.w - inset * 2) / bgW, (view.h - inset * 2) / bgH);
@@ -106,12 +106,12 @@ export function ExpandTool() {
       return;
     }
     setSel(key);
-    if (key === "custom") setTip("Drag the corners to set the area you want to enlarge.");
+    if (key === "custom") setTip("Drag the corners to choose how far to expand.");
     else if (key !== "ratio") setFixed((f) => ({ ...f, [key]: true }));
   };
 
   const create = async () => {
-    if (bgW >= 2 || bgH * aspect >= 2) setTip("The quality may be lower when creating a large area at once.\nTry creating an area first and then adding more.");
+    if (bgW >= 2 || bgH * aspect >= 2) setTip("Big expansions can look softer. Try expanding a little at a time.");
     const from = cur?.c ?? getBase();
     if (!from) return;
     setFailed(false);
@@ -130,48 +130,55 @@ export function ExpandTool() {
   };
 
   const showCreate = sel === "ratio" ? scale > 1.001 : expanded;
-  const optionH = sel === "ratio" ? 54 : 0;
 
   return (
     <>
-      <div ref={boxRef} className="absolute inset-x-0 top-0 z-[5] overflow-hidden" style={{ bottom: MENU, background: "#171717", touchAction: "none" }} onPointerMove={onMove} onPointerUp={() => { drag.current = null; }}>
-        {expanded && <div className="absolute" style={{ left: bx, top: by, width: bgW * k, height: bgH * k, backgroundImage: `url(${d("segmentation_bg")})`, backgroundSize: "24px 24px" }} />}
-        {img && <img src={img} alt="" draggable={false} className="pointer-events-none absolute" style={{ left: ix, top: iy, width: iw, height: ih, visibility: held ? "hidden" : "visible", outline: expanded ? "1px solid #ffffff" : undefined }} />}
-        {expanded && <div className="pointer-events-none absolute" style={{ left: bx - 1.5, top: by - 1.5, width: bgW * k + 3, height: bgH * k + 3, border: "3px solid #ffffff", borderRadius: 1.5 }} />}
+      <div ref={boxRef} className="absolute inset-x-0 z-[5] touch-none overflow-hidden bg-bg" style={{ top: TOP_H, bottom: MENU }} onPointerMove={onMove} onPointerUp={() => { drag.current = null; }}>
+        {expanded && <div className="absolute rounded-[2px]" style={{ left: bx, top: by, width: bgW * k, height: bgH * k, background: CHECKER }} />}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {img && <img src={img} alt="" draggable={false} className="pointer-events-none absolute" style={{ left: ix, top: iy, width: iw, height: ih, visibility: held ? "hidden" : "visible", outline: expanded ? "1px solid rgba(255,255,255,0.6)" : undefined }} />}
+        {expanded && <div className="pointer-events-none absolute rounded-[3px] ring-2 ring-accent" style={{ left: bx, top: by, width: bgW * k, height: bgH * k }} />}
         {sel === "custom" && [0, 1, 2, 3].map((c) => (
           <div
-            key={c} className="absolute" onPointerDown={onCorner(c)}
-            style={{ left: (c === 0 || c === 3 ? bx : bx + bgW * k) - 18, top: (c === 0 || c === 1 ? by : by + bgH * k) - 18, width: 36, height: 36, touchAction: "none" }}
+            key={c} className="absolute touch-none" onPointerDown={onCorner(c)}
+            style={{ left: (c === 0 || c === 3 ? bx : bx + bgW * k) - 22, top: (c === 0 || c === 1 ? by : by + bgH * k) - 22, width: 44, height: 44 }}
           >
-            <img src={d("icon_edit_crop_corner")} alt="" draggable={false} style={{ width: 36, height: 36, transform: `rotate(${c * 90}deg)` }} />
+            <span className="absolute left-1/2 top-1/2 h-5 w-5" style={{ transform: `rotate(${c * 90}deg)`, transformOrigin: "0 0" }}>
+              <span className="absolute -left-[2px] -top-[2px] h-5 w-5 rounded-tl-[3px] border-l-[4px] border-t-[4px] border-accent" />
+            </span>
           </div>
         ))}
         {sel === "custom" && expanded && (
-          <button type="button" onClick={() => setFree(ZERO)} className="absolute text-white" style={{ right: 16, top: 5, height: 34, fontSize: 15 }}>Reset</button>
+          <button type="button" onClick={() => setFree(ZERO)} className="oe-press absolute right-3 top-3 rounded-full bg-glass px-3 py-1.5 text-[13px] font-semibold text-white backdrop-blur-md">Reset</button>
         )}
       </div>
       <TextTooltip text={tip} />
 
-      <div className="absolute inset-x-0 z-20 flex items-center" style={{ bottom: MENU + optionH, height: 54 }} onPointerDown={(e) => e.stopPropagation()}>
-        <CtrlIcon name="undo" enabled={results.i > 0} onClick={() => setResults((r) => ({ ...r, i: r.i - 1 }))} style={{ marginLeft: 10 }} />
-        <CtrlIcon name="redo" enabled={results.i < results.list.length} onClick={() => setResults((r) => ({ ...r, i: r.i + 1 }))} style={{ marginLeft: 10 }} />
-        <span className="flex-1" />
-        <CtrlIcon name="original" enabled onHold={hold} style={{ marginRight: 10 }} />
-      </div>
+      <ControlRow
+        bottom={MENU + (sel === "ratio" ? OPTION_H : 0)}
+        undo={{ can: results.i > 0, on: () => setResults((r) => ({ ...r, i: r.i - 1 })) }}
+        redo={{ can: results.i < results.list.length, on: () => setResults((r) => ({ ...r, i: r.i + 1 })) }}
+        onOriginal={hold}
+      />
       {sel === "ratio" && (
-        <OptionRow bottom={MENU}>
-          <span className="flex-none text-white" style={{ marginLeft: 20, fontSize: 13, width: 36 }}>{`${Math.round(scale * 100)}%`}</span>
-          <EditSeekBar style={{ marginLeft: 24, marginRight: 52 }} value={scale} min={1} max={1.5} def={1.25} duplex={false} format={(v) => `${Math.round(v * 100)}%`} onChange={setScale} />
+        <OptionRow bottom={MENU} label="Expand by">
+          <EditSeekBar value={scale} min={1} max={1.5} def={1.25} duplex={false} format={(v) => `${Math.round(v * 100)}%`} onChange={setScale} />
+          <span className="tabular w-10 flex-none text-right text-[12px] text-fg-3">{`${Math.round(scale * 100)}%`}</span>
         </OptionRow>
       )}
 
       <Panel
-        title="AI Expand" guide onClose={() => openSub(null)}
+        title="Expand" onClose={() => openSub(null)}
         confirmNode={showCreate ? <CreateButton onClick={() => void create()} /> : undefined}
         onConfirm={confirm}
       >
-        <div className="no-scrollbar absolute inset-x-0 top-0 flex items-center overflow-x-auto" style={{ bottom: 52, padding: "0 4px", gap: (view.w - 4 - 5.5 * 58) / 5 }}>
-          {ITEMS.map((it) => <FeatureButton key={it.key} icon={it.icon} label={it.label} selected={sel === it.key} onClick={() => pick(it.key)} />)}
+        <div className="no-scrollbar flex h-full items-center gap-1 overflow-x-auto px-3">
+          {ITEMS.map((it) => (
+            <FeatureButton
+              key={it.key} label={it.label} selected={sel === it.key} onClick={() => pick(it.key)}
+              iconNode={it.key === "ratio" ? <span className="block h-5 w-5 rounded-[4px] border-2 border-current outline-dashed outline-2 outline-offset-2 outline-current" /> : <RatioGlyph ratio={it.r} />}
+            />
+          ))}
         </div>
       </Panel>
       {failed && <RetryView text={FAIL} onRetry={() => void create()} />}

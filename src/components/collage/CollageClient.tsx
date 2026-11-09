@@ -4,21 +4,23 @@ import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import type { CollageDev } from "./CollageScreen";
 
-// The collage editor needs IndexedDB + canvas, so it only renders on the client.
+// The collage maker needs IndexedDB and canvas, so it only renders on the client.
 const CollageScreen = dynamic(() => import("./CollageScreen").then((m) => m.CollageScreen), {
   ssr: false,
-  loading: () => <div className="absolute inset-0 bg-black" />,
+  loading: () => <div className="absolute inset-0 bg-bg" />,
 });
 
 export function CollageClient() {
   const sp = useSearchParams();
   const ids = (sp.get("ids") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  // Dev-only verification hooks (headless screenshots), e.g. /collage?__n=4&__menu=BORDER&__border=0.5&__save=1
+  // Dev-only proof hooks, e.g. /collage?__sample=4&__menu=BORDER&__border=0.5&__save=1 (__sample = synthetic photos,
+  // __n = the newest gallery photos)
   let dev: CollageDev | undefined;
   if (process.env.NODE_ENV !== "production" && [...sp.keys()].some((k) => k.startsWith("__"))) {
     const num = (k: string) => (sp.get(k) != null ? Number(sp.get(k)) : undefined);
     dev = {
       n: num("__n"),
+      sample: num("__sample"),
       menu: (sp.get("__menu") as CollageDev["menu"]) ?? undefined,
       depth: (sp.get("__depth") as CollageDev["depth"]) ?? undefined,
       sel: sp.get("__sel") ?? undefined,

@@ -1,39 +1,37 @@
 "use client";
 
-// Shared pieces for the Tools / Portrait two-depth pages: EditTextTooltip, SnowRetryView, EditAiLoading,
-// EditLoading, the title row, the photo-area overlay used by bitmap tools, brush stroke masks, colour helpers.
+// Shared pieces for the Tools and Portrait pages: hint pills, retry and progress overlays, the tool-page dock, the
+// photo-area overlay used by bitmap tools, brush stroke masks and colour helpers.
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { d } from "@/components/ui/legacy-drawable";
+import { Button, Icon, Spinner, cx } from "@/components/ui";
 import { useEdit } from "../ctx";
 import { frameGeo } from "../pipeline";
-import { Img, PRIMARY, Tint, WHITE60 } from "../ui";
+import { BarAction, ColorChip, Dock, EditBar, HintPill, MENU, TOP_H } from "../ui";
 
-export const MENU = 186;
+export { MENU };
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 
-/* ------------------------------------------------------------------ strings (values/strings.xml) */
+/* ------------------------------------------------------------------ copy */
 
 export const S = {
-  noFace: "Unable to recognize any faces.",
-  networkTry: "You are not connected to network.\nPlease check your network settings and try again.",
-  networkConnect: "You are not connected to the network.\nPlease connect and try again.",
-  retry: "Retry",
-  processing: "Processing…",
+  noFace: "No face found in this photo.",
+  networkTry: "That didn't work. Check your connection and try again.",
+  networkConnect: "That didn't work. Please try again.",
+  retry: "Try again",
+  processing: "Working on it…",
   downloading: "Downloading…",
-  inProgress: "In progress…",
+  inProgress: "Working on it…",
 };
 
-/* ------------------------------------------------------------------ EditTextTooltip */
+/* ------------------------------------------------------------------ hint pill */
 
-/** EditTextTooltip: centred in the preview (above `bottom`), marginH 60, 13dp white on r18 #99000000. */
-export function TextTooltip({ text, bottom = MENU, top = 0 }: { text: string | null; bottom?: number; top?: number }) {
+/** Hint centred in the preview area (between the top bar and `bottom`). */
+export function TextTooltip({ text, bottom = MENU, top = TOP_H }: { text: string | null; bottom?: number; top?: number }) {
   if (!text) return null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 z-30 flex items-center justify-center" style={{ top, bottom, padding: "0 60px" }}>
-      <div className="whitespace-pre-line text-center text-white" style={{ fontSize: 13, lineHeight: "16px", minHeight: 36, padding: "10px 15px", borderRadius: 18, background: "rgba(0,0,0,0.6)" }}>
-        {text}
-      </div>
+    <div className="pointer-events-none absolute inset-x-0 z-30 flex items-center justify-center px-12" style={{ top, bottom }}>
+      <HintPill key={text} text={text} />
     </div>
   );
 }
@@ -51,95 +49,105 @@ export function useTimedTooltip(initial: string | null, ms = 2000): [string | nu
   return [text, setText];
 }
 
-/* ------------------------------------------------------------------ SnowRetryView / EditAiLoading / EditLoading */
+/* ------------------------------------------------------------------ retry / AI progress / busy */
 
-/** SnowRetryView (view_snow_retry.xml): white r20 "Retry" pill (40dp, 15dp #222222) + 14dp description. */
+/** Error card over the preview with a retry button. */
 export function RetryView({ text, onRetry, bottom = MENU }: { text: string; onRetry: () => void; bottom?: number }) {
   return (
-    <div className="absolute inset-x-0 top-0 z-30 flex flex-col items-center justify-center" style={{ bottom }}>
-      <button type="button" onClick={onRetry} style={{ height: 40, minWidth: 90, padding: "0 12px", borderRadius: 20, background: "#ffffff", color: "#222222", fontSize: 15 }}>
-        {S.retry}
-      </button>
-      <p className="whitespace-pre-line text-center text-white" style={{ marginTop: 20, padding: "0 20px", fontSize: 14, lineHeight: "17px" }}>{text}</p>
+    <div className="absolute inset-x-0 z-30 flex items-center justify-center px-10" style={{ top: TOP_H, bottom }}>
+      <div className="flex max-w-[280px] flex-col items-center gap-3 rounded-lg bg-panel/95 p-5 text-center shadow-2xl ring-1 ring-line backdrop-blur-md">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/15 text-danger"><Icon name="alert" size={20} /></span>
+        <p className="whitespace-pre-line text-[14px] leading-snug text-fg-2">{text}</p>
+        <Button size="sm" icon="reset" onClick={onRetry}>{S.retry}</Button>
+      </div>
     </div>
   );
 }
 
-/** EditAiLoading (view_edit_ai_loading.xml): 200dp r15 #99000000 card, close 40dp, 90dp spinner, 14dp text. */
-export function AiLoading({ text, onCancel }: { text: string; onCancel: () => void }) {
+/** Progress ring with a percentage. */
+export function ProgressRing({ value, size = 76 }: { value: number; size?: number }) {
+  const r = size / 2 - 4, c = 2 * Math.PI * r;
   return (
-    <div className="absolute inset-0 z-[70]" style={{ background: "transparent" }}>
-      <div className="absolute inset-x-0 top-0 flex items-center justify-center" style={{ bottom: MENU }}>
-        <div className="relative" style={{ width: 200, height: 200, borderRadius: 15, background: "rgba(0,0,0,0.6)" }}>
-          <button type="button" onClick={onCancel} className="absolute right-0 top-0" style={{ width: 40, height: 40 }} aria-label="Cancel">
-            <Img name="icon_edit_popup_close" size={40} />
-          </button>
-          <img src={d("lens_loading")} alt="" className="spin-save absolute left-1/2" style={{ top: 41.5, width: 90, height: 90, marginLeft: -45 }} />
-          <p className="absolute inset-x-0 whitespace-pre-line text-center text-white" style={{ top: 141.5, padding: "0 15px", fontSize: 14, lineHeight: "17px" }}>{text}</p>
+    <span className="relative block" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--oe-muted)" strokeWidth={5} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--oe-accent)" strokeWidth={5} strokeLinecap="round" strokeDasharray={`${(c * Math.min(100, value)) / 100} ${c}`} style={{ transition: "stroke-dasharray 200ms" }} />
+      </svg>
+      <span className="tabular absolute inset-0 flex items-center justify-center font-display text-[17px] font-semibold">{Math.round(value)}%</span>
+    </span>
+  );
+}
+
+/** On-device AI job card: progress ring, a step caption and Cancel. Blocks the editor while it runs. */
+export function AiLoading({ text, pct, onCancel }: { text: string; pct?: number; onCancel: () => void }) {
+  const [caption, num] = text.split("\n");
+  const value = pct ?? (num ? parseInt(num, 10) || 0 : 0);
+  return (
+    <div className="absolute inset-0 z-[70]" onPointerDown={(e) => e.stopPropagation()}>
+      <div className="absolute inset-x-0 flex items-center justify-center" style={{ top: TOP_H, bottom: MENU }}>
+        <div className="flex w-[220px] flex-col items-center gap-3 rounded-lg bg-panel/95 px-5 pb-4 pt-5 shadow-2xl ring-1 ring-line backdrop-blur-md" style={{ animation: "oe-pop 200ms var(--oe-ease)" }}>
+          <ProgressRing value={value} />
+          <p className="text-center text-[14px] font-medium leading-snug text-fg">{caption}</p>
+          <p className="-mt-2 text-center text-[12px] text-fg-3">Runs on your device</p>
+          <Button variant="secondary" size="sm" onClick={onCancel} block>Cancel</Button>
         </div>
       </div>
     </div>
   );
 }
 
-/** EditLoading: spinner + optional label, centred above the panel. */
+/** Small busy indicator centred over the preview. */
 export function EditLoading({ text, bottom = MENU }: { text?: string; bottom?: number }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col items-center justify-center" style={{ bottom }}>
-      <img src={d("lens_loading")} alt="" className="spin-save" style={{ width: 37, height: 37 }} />
-      {text && <p className="text-white" style={{ marginTop: 8, fontSize: 13 }}>{text}</p>}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ panel + title row */
-
-/** container_feature (186dp black) with the 52dp title bar: X / title (+ guide "?") / mint check. */
-export function Panel({ title, guide, onClose, onConfirm, confirmNode, children, height = MENU, bg = "#000000", style }: {
-  title?: ReactNode; guide?: boolean; onClose?: () => void; onConfirm?: () => void; confirmNode?: ReactNode;
-  children?: ReactNode; height?: number; bg?: string; style?: CSSProperties;
-}) {
-  return (
-    <div className="absolute inset-x-0 bottom-0 z-20" style={{ height, background: bg, ...style }} onPointerDown={(e) => e.stopPropagation()}>
-      {children}
-      <div className="absolute inset-x-0 bottom-0 flex items-center" style={{ height: 52 }}>
-        {onClose ? (
-          <button type="button" onClick={onClose} className="flex-none" style={{ width: 52, height: 52 }} aria-label="Close"><Img name="icon_edit_title_close" size={52} /></button>
-        ) : <span style={{ width: 52 }} />}
-        <div className="flex min-w-0 flex-1 items-center justify-center text-white" style={{ fontSize: 15, lineHeight: "18px" }}>
-          {title}
-          {guide && <Img name="icon_common_list_guide" size={21} style={{ marginLeft: 2 }} />}
-        </div>
-        {confirmNode ?? (onConfirm ? (
-          <button type="button" onClick={onConfirm} className="flex-none" style={{ width: 52, height: 52 }} aria-label="Confirm"><Tint name="icon_edit_title_confirm" size={52} color={PRIMARY} /></button>
-        ) : <span style={{ width: 52 }} />)}
+    <div className="pointer-events-none absolute inset-x-0 z-30 flex items-center justify-center" style={{ top: TOP_H, bottom }}>
+      <div className="flex items-center gap-2.5 rounded-full bg-glass px-4 py-2.5 text-[13px] font-medium text-white backdrop-blur-md">
+        <Spinner size={18} className="text-accent" />
+        {text ?? "Loading…"}
       </div>
     </div>
   );
 }
 
-/** "Create" pill (btn_generate): 32dp, paddingH 15, 15dp white on r18 #0bd4d2, marginEnd 8. */
-export function CreateButton({ onClick }: { onClick: () => void }) {
+/* ------------------------------------------------------------------ tool page dock + bar */
+
+/** A tool page: its Cancel / title / Apply bar in the top bar and its controls in the dock. */
+export function Panel({ title, onClose, onConfirm, confirmNode, children, height = MENU, style, className }: {
+  title?: ReactNode; guide?: boolean; onClose?: () => void; onConfirm?: () => void; confirmNode?: ReactNode;
+  children?: ReactNode; height?: number; bg?: string; style?: CSSProperties; className?: string;
+}) {
   return (
-    <button type="button" onClick={onClick} className="flex-none text-white" style={{ height: 32, padding: "0 15px", borderRadius: 18, background: PRIMARY, fontSize: 15, marginRight: 8 }}>
-      Create
-    </button>
+    <>
+      <EditBar title={title} onClose={onClose} onConfirm={onConfirm} confirmNode={confirmNode} />
+      <Dock height={height} style={style} className={className}>{children}</Dock>
+    </>
   );
 }
 
-/** Option row (54dp #66000000) with an optional 13dp label at marginLeft 20 / maxWidth 80. */
-export function OptionRow({ bottom, label, labelWidth, children, bg = "rgba(0,0,0,0.4)", height = 54 }: { bottom: number; label?: string; labelWidth?: number; children: ReactNode; bg?: string; height?: number }) {
+/** "Generate" action for the bar (runs an AI step instead of applying). */
+export function CreateButton({ onClick, label = "Generate" }: { onClick: () => void; label?: string }) {
+  return <BarAction label={label} onClick={onClick} />;
+}
+
+/** Strip that sits on top of the dock (sliders, colour rows), with an optional caption. */
+export function OptionRow({ bottom, label, labelWidth, children, height = 52 }: { bottom: number; label?: string; labelWidth?: number; children: ReactNode; bg?: string; height?: number }) {
   return (
-    <div className="absolute inset-x-0 z-20 flex items-center" style={{ bottom, height, background: bg }} onPointerDown={(e) => e.stopPropagation()}>
-      {label !== undefined && <span className="flex-none truncate text-white" style={{ marginLeft: 20, maxWidth: 80, width: labelWidth, fontSize: 13, textShadow: "0 0 2px rgba(0,0,0,0.3)" }}>{label}</span>}
+    <div className="absolute inset-x-3 z-20 flex items-center gap-3 rounded-lg bg-panel/90 px-3 shadow-lg ring-1 ring-line backdrop-blur-md" style={{ bottom: bottom + 8, height }} onPointerDown={(e) => e.stopPropagation()}>
+      {label !== undefined && <span className="flex-none whitespace-nowrap text-[13px] font-medium text-fg-2" style={{ minWidth: labelWidth ?? 56 }}>{label}</span>}
       {children}
     </div>
   );
 }
+/** Total height an OptionRow takes above `bottom` (row + gap). */
+export const OPTION_H = 60;
 
-/** Text toggle using edit_title_selector (white / #99ffffff). */
+/** Text toggle (two or three modes in a row). */
 export function TextToggle({ label, selected, onClick, style }: { label: string; selected: boolean; onClick: () => void; style?: CSSProperties }) {
-  return <button type="button" onClick={onClick} style={{ fontSize: 13, color: selected ? "#ffffff" : WHITE60, ...style }}>{label}</button>;
+  return (
+    <button type="button" onClick={onClick} aria-pressed={selected} style={style}
+      className={cx("oe-press h-8 rounded-full px-3 text-[13px] font-semibold transition-colors", selected ? "bg-fg text-bg" : "text-fg-2")}>
+      {label}
+    </button>
+  );
 }
 
 /* ------------------------------------------------------------------ photo area geometry + overlay canvas */
@@ -151,7 +159,7 @@ export interface PhotoArea {
   pw: number; ph: number;
   /** frame-normalized -> photo-normalized */
   toPhoto: (fx: number, fy: number) => [number, number];
-  /** editor view width (EditPreviewTouchGuideView width) */
+  /** editor view width */
   viewW: number;
 }
 
@@ -171,7 +179,7 @@ export function usePhotoArea(): PhotoArea {
 }
 
 /** Canvas laid exactly over the photo area (pointer-events none, so the editor preview keeps the gestures). */
-export function PhotoOverlay({ area, canvasRef, hidden, bg = "#171717", children }: { area: PhotoArea; canvasRef: React.RefObject<HTMLCanvasElement | null>; hidden?: boolean; bg?: string; children?: ReactNode }) {
+export function PhotoOverlay({ area, canvasRef, hidden, bg = "var(--oe-bg)", children }: { area: PhotoArea; canvasRef: React.RefObject<HTMLCanvasElement | null>; hidden?: boolean; bg?: string; children?: ReactNode }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-[5] overflow-hidden" style={{ bottom: MENU, visibility: hidden ? "hidden" : "visible" }}>
       <div className="absolute inset-0" style={{ background: bg }} />
@@ -201,7 +209,7 @@ export function copyCanvas(src: CanvasImageSource & { width: number; height: num
   return c;
 }
 
-/** Push a bitmap result as a new base (like CROP / CUTOUT history steps) and leave the sub page. */
+/** Push a bitmap result as a new base (one history step) and leave the tool page. */
 export function useBake() {
   const { doc, bases, commit, openSub } = useEdit();
   return (fn: (base: HTMLCanvasElement) => HTMLCanvasElement) => {
@@ -269,7 +277,7 @@ export function useStrokes<T>() {
   };
 }
 
-/** EditPreviewTouchGuideView: a white ring showing the brush size while touching / dragging the size slider. */
+/** Brush outline shown while touching the photo or dragging a size slider. */
 export function BrushRing({ at, r }: { at: { x: number; y: number } | null; r: number }) {
   if (!at) return null;
   return (
@@ -287,21 +295,15 @@ export function sampleHex(src: CanvasImageSource & { width: number; height: numb
   return `#${[p[0], p[1], p[2]].map((x) => x.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
 }
 
-/** HSV value of a hex colour (EditColorView uses V < 0.1 as "dark"). */
+/** HSV value of a hex colour (below 0.1 counts as "dark"). */
 export const hexV = (hex: string) => {
   const n = parseInt(hex.replace("#", ""), 16);
   return Math.max((n >> 16) & 255, (n >> 8) & 255, n & 255) / 255;
 };
 
-/** EditColorView 32dp: dark = 1dp #6f6f6f outline (2dp white when selected); light = 2.5dp black ring inset 2dp. */
+/** Colour swatch (same look as the editor's ColorChip). */
 export function Swatch({ color, selected, onClick, style }: { color: string; selected: boolean; onClick: () => void; style?: CSSProperties }) {
-  const dark = hexV(color) < 0.1;
-  return (
-    <button type="button" onClick={onClick} className="relative flex-none rounded-full" style={{ width: 32, height: 32, background: color, boxShadow: dark && !selected ? "inset 0 0 0 1px #6f6f6f" : undefined, ...style }}>
-      {selected && !dark && <span className="absolute rounded-full" style={{ inset: 2, border: "2.5px solid #000000" }} />}
-      {selected && dark && <span className="absolute inset-0 rounded-full" style={{ border: "2px solid #ffffff" }} />}
-    </button>
-  );
+  return <ColorChip color={color} selected={selected} onClick={onClick} style={style} />;
 }
 
 /* ------------------------------------------------------------------ preview drawing input */

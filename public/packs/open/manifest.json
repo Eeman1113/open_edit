@@ -4544,6 +4544,16 @@
      "poster": "clip-2-poster"
     }
    }
+  },
+  "content": {
+   "music": {
+    "path": "content/music.json",
+    "type": "application/json",
+    "license": "MIT",
+    "meta": {
+     "tracks": 6
+    }
+   }
   }
  }
 }

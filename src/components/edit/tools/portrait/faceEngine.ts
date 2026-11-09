@@ -66,7 +66,7 @@ export function detectFaces(base: HTMLCanvasElement): Promise<Detection> {
 
 export function peekPose(base: HTMLCanvasElement | null | undefined) { return base ? posed.get(base) : undefined; }
 
-/** Body pose of the biggest person (EPBody: "the person that appears the biggest in the picture"). */
+/** Body pose of the largest person in the picture. */
 export function detectPose(base: HTMLCanvasElement): Promise<PoseDetection> {
   const hit = posed.get(base);
   if (hit) return Promise.resolve(hit);
@@ -125,7 +125,7 @@ export const flippedUrlReady = (id: string) => flippedReady(beautyMarkUrl(id));
 export interface FaceParams { shape: ShapeWeights; warp: Partial<WarpParams>; ops: WarpOp[]; makeup: MakeupParams; skin: SkinParams }
 export interface SkinParams { pore: number; conceal: number; matte: number; texture: number; vibrance: number; glow: number; details: number; eyeDetails: number; blemish: number }
 
-/** One touch (w78.C26497e): blemish on, Pore 0.3, Wrinkles 0.3, Details 0.2, Eye bags 0.3, Whiten 0.2. */
+/** Quick fix preset: spot removal on, pores 0.3, lines 0.3, fine detail 0.2, under-eyes 0.3, teeth 0.2. */
 export const ONE_TOUCH: Record<string, number> = { blemish: 1, balance: 0.3, wrinkle: 0.3, clarity: 0.2, eyebag: 0.3, teeth: 0.2 };
 
 export function faceParams(v: FaceVals | undefined, corr = false): FaceParams {

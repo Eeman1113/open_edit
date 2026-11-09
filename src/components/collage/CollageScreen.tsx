@@ -1,24 +1,18 @@
 "use client";
 
-// CollageActivity → CollageMainFragment (fragment_collage.xml):
-//  - app bar 52dp: btn_back (icon_top_back 34dp, white, marginStart 8) and btn_save ("SAVE", bold white, 32dp,
-//    minWidth 48, paddingH 12, r15 #0bd4d2, marginEnd 16). Both hidden while a 2-depth page is open.
-//  - texture_view (the collage preview) from 52dp to bottom − 190dp, black.
-//  - bottom menu: Sequence / Layout / Border (15dp, white / white 60%, 52dp, chain with 30dp side margins);
-//    the selected menu's fragment (138dp) sits right above it. Layout is selected on start.
-//  - 2-depth pages over everything: FOCUS (a cell was tapped) and COLOR_PALETTE.
-//  - group_loading: full-screen touch blocker + 120dp rgba(0,0,0,.6) r12 box with the white loading lottie,
-//    centred on the preview, while photos load or the collage is saved.
-// Save → JPEG at full resolution → savePhoto(..., "B612") → EditConfirmFragment (COLLAGE).
+// Collage maker: top bar (back · Save), the collage preview, and a dock with Layout / Stack / Border over a tab bar.
+// Tapping a cell opens the photo page (replace, rotate, flip; drag or pinch to frame); holding a cell and dragging
+// swaps it with another. The colour mixer opens from Border. Save renders a full-size JPEG into the gallery and shows
+// the Saved page.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertDialog, Toast, Tint, useToast } from "@/components/edit/ui";
+import { Button, Dialog, Icon, IconButton, Spinner, TOKENS, cx, toast } from "@/components/ui";
 import { useBackHandler } from "@/lib/back";
-import { LottieLoading } from "@/components/ai/LottieLoading";
 import { getPhoto, isVideoPhoto, listPhotos, savePhoto } from "@/lib/store";
+import { sampleCanvas } from "@/components/edit/devSample";
 import { COMMON_COLORS, PACKS, borderEditable, defaultPack, templatesFor, type Pack, type Sel } from "./layouts";
 import { aspectOf, coverScale, draw, hitCell, renderJpeg, XF0, type Pic, type Scene, type Xf } from "./render";
-import { BorderPanel, FEATURE_H, FocusPanel, LayoutPanel, MENU_H, PalettePanel, SequencePanel, type BorderItem } from "./panels";
+import { BorderPanel, FEATURE_H, FocusPanel, LayoutPanel, MENU_H, PageBar, PalettePanel, SequencePanel, type BorderItem } from "./panels";
 import { CollageConfirm } from "./Confirm";
 
 type Menu = "SEQUENCE" | "LAYOUT" | "BORDER";
@@ -26,12 +20,12 @@ type Depth = "NONE" | "FOCUS" | "COLOR_PALETTE";
 interface BorderColor { type: "builtin" | "picker" | "palette"; color: string }
 
 export interface CollageDev {
-  n?: number; menu?: Menu; depth?: Depth; sel?: string; pack?: string; border?: number; color?: string;
+  n?: number; sample?: number; menu?: Menu; depth?: Depth; sel?: string; pack?: string; border?: number; color?: string;
   picker?: boolean; save?: boolean; share?: boolean; alert?: boolean;
 }
 
 const APPBAR = 52;
-const BOTTOM = FEATURE_H + MENU_H; // guide_feature_top = bottom − 190dp
+const BOTTOM = FEATURE_H + MENU_H;
 const LONG_PRESS = 400;
 
 const vibrate = () => { try { navigator.vibrate?.(20); } catch {} };
@@ -54,7 +48,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
     return () => ro.disconnect();
   }, []);
 
-  /* ---------------------------------------------------------------- data (CollageDataViewModel) */
+  /* ---------------------------------------------------------------- collage data */
   const [pics, setPics] = useState<Pic[] | null>(null);
   const [cellPhoto, setCellPhoto] = useState<number[]>([]);
   const [xf, setXf] = useState<Xf[]>([]);
@@ -67,7 +61,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
   const [paletteColor, setPaletteColor] = useState<string | null>(null);
   const [flashKey, setFlashKey] = useState(0);
 
-  /* ---------------------------------------------------------------- page (CollagePageViewModel) */
+  /* ---------------------------------------------------------------- page state */
   const [menu, setMenu] = useState<Menu>(dev?.menu ?? "LAYOUT");
   const [depth, setDepth] = useState<Depth>("NONE");
   const [focusCell, setFocusCell] = useState<number | null>(null);
@@ -78,13 +72,25 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
   const [saveLoading, setSaveLoading] = useState(false);
   const [alert, setAlert] = useState(false);
   const [saved, setSaved] = useState<{ url: string; blob: Blob } | null>(null);
-  const [toast, showToast] = useToast();
   const [swapTarget, setSwapTarget] = useState<number | null>(null);
 
-  /* ---------------------------------------------------------------- load photos (initCollagePage / AddCollage) */
+  /* ---------------------------------------------------------------- load photos */
   useEffect(() => {
     let dead = false;
     (async () => {
+      if (dev?.sample) {
+        const n = Math.max(2, Math.min(9, dev.sample));
+        const out = await Promise.all(Array.from({ length: n }, (_, i) => createImageBitmap(sampleCanvas(900, 1200 - (i % 3) * 250, i + 1)).then((img) => ({ img, w: img.width, h: img.height }))));
+        if (dead) return;
+        setPics(out); setCellPhoto(out.map((_, i) => i)); setXf(out.map(() => ({ ...XF0 })));
+        const p0 = (dev.pack && PACKS.find((p) => p.id === dev.pack)) || defaultPack(out.length);
+        setPack(p0);
+        setSel(dev.sel === "height" || dev.sel === "width" ? { kind: dev.sel } : { kind: "layout", pack: p0.id, index: dev.sel && /^\d+$/.test(dev.sel) ? Math.min(+dev.sel, templatesFor(out.length).length - 1) : 0 });
+        if (dev.border !== undefined) setBorder(dev.border);
+        if (dev.color) setBorderColor({ type: "builtin", color: dev.color });
+        setImageLoading(false);
+        return;
+      }
       let list = ids;
       if (!list.length && dev?.n) {
         const all = (await listPhotos()).filter((p) => !isVideoPhoto(p) && p.blob.type !== "image/gif");
@@ -97,11 +103,11 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
         try { out.push(await decode(p.blob)); } catch {}
       }
       if (dead) return;
-      if (out.length < 1) { router.replace("/gallery"); return; } // CollageActivity.k1: empty list → finish()
+      if (out.length < 1) { router.replace("/gallery"); return; } // nothing to lay out
       setPics(out);
       setCellPhoto(out.map((_, i) => i));
       setXf(out.map(() => ({ ...XF0 })));
-      // loadData: default pack (1:1 for 2/3/5/7/8 photos, else 3:4) + its first layout
+      // default canvas (1:1 for 2/3/5/7/8 photos, else 3:4) and its first layout
       const p0 = (dev?.pack && PACKS.find((p) => p.id === dev.pack)) || defaultPack(out.length);
       setPack(p0);
       let s0: Sel = { kind: "layout", pack: p0.id, index: 0 };
@@ -128,7 +134,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
   }), [sel, pics, cellPhoto, xf, border, paletteLive, borderColor]);
 
   /* ---------------------------------------------------------------- preview geometry */
-  const region = { x: 0, y: APPBAR, w: size.w, h: Math.max(1, size.h - APPBAR - BOTTOM) };
+  const region = { x: 12, y: APPBAR + 12, w: size.w - 24, h: Math.max(1, size.h - APPBAR - BOTTOM - 24) };
   const aspect = sel.kind === "none" ? 1 : aspectOf(scene);
   const fit = region.w / region.h > aspect ? { h: region.h, w: region.h * aspect } : { w: region.w, h: region.w / aspect };
   const view = { x: region.x + (region.w - fit.w) / 2, y: region.y + (region.h - fit.h) / 2, w: fit.w, h: fit.h };
@@ -143,13 +149,13 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
     if (c.height !== H) c.height = H;
     const ctx = c.getContext("2d")!;
     const hl = swapTarget ?? (depth === "FOCUS" ? focusCell : null);
-    const cells = draw(ctx, scene, W, H, { selected: hl, lineWidth: 2 * dpr });
+    const cells = draw(ctx, scene, W, H, { selected: hl, lineWidth: 3 * dpr, highlight: TOKENS.color.accent });
     cellsRef.current = cells.map(([x, y, w, h]) => [x / dpr, y / dpr, w / dpr, h / dpr]);
   }, [scene, view.w, view.h, pics, sel.kind, depth, focusCell, swapTarget]);
 
   /* ---------------------------------------------------------------- data actions */
   const applySel = (s: Sel) => {
-    // CollageDataViewModel.dg: switching between border-editable / non-editable restores or stashes the width
+    // switching between a selection with a border and one without stashes or restores the width
     const same = JSON.stringify(sel) === JSON.stringify(s);
     if (!same && borderEditable(sel) !== borderEditable(s)) {
       if (borderEditable(s)) setBorder(savedBorder.current);
@@ -168,7 +174,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
     return out;
   }, [pickerColor, paletteColor]);
 
-  /* ---------------------------------------------------------------- colour picker (ux4) */
+  /* ---------------------------------------------------------------- colour picker */
   const sampleAt = useCallback((x: number, y: number) => {
     const c = canvasRef.current;
     if (!c) return "#000000";
@@ -192,7 +198,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
     return () => window.clearTimeout(t);
   }, [dev?.picker, pics, menu, startPicker]);
 
-  /* ---------------------------------------------------------------- 2-depth pages */
+  /* ---------------------------------------------------------------- photo page and colour mixer */
   const openFocus = useCallback((cell: number) => {
     if (depth !== "FOCUS") {
       focusSnap.current = { xf: xf.map((x) => ({ ...x })), cellPhoto: [...cellPhoto], pics: pics ? [...pics] : [] };
@@ -253,15 +259,15 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
     setSaveLoading(true);
     try {
       const { blob, W, H } = await renderJpeg(scene);
-      await savePhoto(blob, W, H, "B612");
+      await savePhoto(blob, W, H);
       setSaved({ url: URL.createObjectURL(blob), blob });
     } catch {
-      showToast("Failed to save a photo.");
+      toast("Couldn't save the collage. Please try again.", { icon: "alert", tone: "danger" });
     }
     setSaveLoading(false);
-  }, [saveLoading, pics, scene, showToast]);
+  }, [saveLoading, pics, scene]);
   const onSave = () => {
-    if (sel.kind === "none") { setAlert(true); return; } // CollageMainFragment.U4: nothing applied → leave alert
+    if (sel.kind === "none") { setAlert(true); return; } // nothing laid out yet: offer to leave
     void doSave();
   };
   const devSaved = useRef(false);
@@ -279,7 +285,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
     return () => window.clearTimeout(t);
   }, [dev?.alert, pics]);
 
-  /* ---------------------------------------------------------------- preview touch (ImageEditor.J2 → collage engine) */
+  /* ---------------------------------------------------------------- preview gestures: pan / pinch / rotate a cell, hold to swap */
   const gest = useRef<{
     pts: Map<number, { x: number; y: number }>; cell: number; t0: number; x0: number; y0: number;
     mode: "idle" | "pan" | "pinch" | "swap"; base: Xf; d0: number; a0: number; mx0: number; my0: number;
@@ -364,7 +370,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
         tx: g.base.tx + (t.mx - g.mx0) / cw,
         ty: g.base.ty + (t.my - g.my0) / ch,
       };
-      // snap_rotation: snap the total angle to a multiple of 90° within 4°
+      // snap the total angle to a multiple of 90° within 4°
       const tot = next.rot90 * 90 + next.ang;
       const near = Math.round(tot / 90) * 90;
       const inR = Math.abs(tot - near) < 4;
@@ -382,7 +388,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
       next.tx = Math.min(mx, Math.max(-mx, next.tx));
       next.ty = Math.min(my, Math.max(-my, next.ty));
     }
-    // snap_position: snap the photo centre to the cell centre within 6dp
+    // snap the photo centre to the cell centre within 6 px
     const inT = Math.abs(next.tx * cw) < 6 && Math.abs(next.ty * ch) < 6;
     if (inT) { next.tx = 0; next.ty = 0; }
     if (inT && !g.snapT) vibrate();
@@ -391,7 +397,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
   };
   const onUp = (e: React.PointerEvent) => {
     if (picker) {
-      // ux4 ACTION_UP → mg(colour): picker colour becomes the border colour, picker closes
+      // lifting the finger makes the picked colour the border colour
       const c = picker.color;
       setPickerColor(c);
       setBorderColor({ type: "picker", color: c });
@@ -407,7 +413,7 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
     }
     window.clearTimeout(g.lp);
     gest.current = null;
-    if (g.mode === "idle") { openFocus(g.cell); return; } // "select" event → Collage2DepthType.FOCUS
+    if (g.mode === "idle") { openFocus(g.cell); return; } // a tap opens the photo page
     if (g.mode === "swap") {
       const t = swapTarget;
       setSwapTarget(null);
@@ -422,113 +428,94 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
   /* ---------------------------------------------------------------- render */
   const topVisible = depth === "NONE";
   const loading = imageLoading || saveLoading;
+  const MENUS: { id: Menu; label: string; icon: "collage" | "stack-v" | "frame" }[] = [
+    { id: "LAYOUT", label: "Layout", icon: "collage" }, { id: "SEQUENCE", label: "Stack", icon: "stack-v" }, { id: "BORDER", label: "Border", icon: "frame" },
+  ];
   return (
-    <div ref={rootRef} className="absolute inset-0 overflow-hidden bg-black" style={{ touchAction: "none" }}>
-      <style>{"@keyframes collage-fade{from{opacity:0}to{opacity:1}}"}</style>
-
-      {/* texture_view: the collage preview */}
+    <div ref={rootRef} className="absolute inset-0 overflow-hidden bg-bg text-fg" style={{ touchAction: "none" }}>
+      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 80% at 50% 40%, var(--oe-panel), var(--oe-bg) 70%)" }} />
+      {/* gesture surface over the preview area */}
       <div
         className="absolute"
-        style={{ left: region.x, top: region.y, width: region.w, height: region.h, touchAction: "none" }}
+        style={{ left: 0, top: APPBAR, width: size.w, height: Math.max(1, size.h - APPBAR - BOTTOM), touchAction: "none" }}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
       />
       {sel.kind !== "none" && pics && (
-        <canvas ref={canvasRef} className="pointer-events-none absolute" style={{ left: view.x, top: view.y, width: view.w, height: view.h }} />
+        <canvas ref={canvasRef} className="pointer-events-none absolute shadow-[0_8px_32px_rgba(0,0,0,0.45)]" style={{ left: view.x, top: view.y, width: view.w, height: view.h }} />
       )}
 
-      {/* app bar */}
       {topVisible && (
-        <>
-          <button type="button" onClick={onBackPressed} aria-label="Back" className="absolute" style={{ left: 8, top: 9, width: 34, height: 34 }}>
-            <Tint name="icon_top_back" size={34} color="#ffffff" />
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            className="absolute flex items-center justify-center text-white"
-            style={{ right: 16, top: 10, height: 32, minWidth: 48, padding: "0 12px", borderRadius: 15, background: "#0bd4d2", fontSize: 14, fontWeight: 700, lineHeight: "16px" }}
-          >
-            SAVE
-          </button>
-        </>
+        <div className="absolute inset-x-0 top-0 z-20 flex items-center gap-2 bg-bg/95 px-2 backdrop-blur-md" style={{ height: APPBAR }}>
+          <IconButton icon="back" label="Back" variant="raised" onClick={onBackPressed} />
+          <span className="flex-1 text-center font-display text-[16px] font-semibold">Collage</span>
+          <Button size="sm" icon="save" className="h-10 rounded-full px-4" onClick={onSave}>Save</Button>
+        </div>
       )}
 
-      {/* fragment_container: the selected menu (138dp) above the bottom tabs */}
-      <div className="pointer-events-none absolute inset-x-0" style={{ bottom: MENU_H, height: FEATURE_H }}>
-        <div className="pointer-events-auto absolute inset-0">
-          {menu === "LAYOUT" && (
-            <LayoutPanel
-              templates={templates}
-              pack={pack}
-              sel={sel}
-              onPack={setPack}
-              onLayout={(i) => applySel({ kind: "layout", pack: pack.id, index: i })}
-            />
-          )}
-          {menu === "SEQUENCE" && <SequencePanel sel={sel} onHeight={() => applySel({ kind: "height" })} onWidth={() => applySel({ kind: "width" })} />}
-          {menu === "BORDER" && (
-            <BorderPanel
-              items={borderItems}
-              current={borderColor}
-              size={border}
-              sizeEnabled={borderEditable(sel)}
-              flashKey={flashKey}
-              onSize={setBorder}
-              dimmed={!!picker}
-              onItem={(it) => {
-                if (it.kind === "tool") {
-                  if (it.tool === "picker") startPicker();
-                  else setDepth("COLOR_PALETTE");
-                } else setBorderColor({ type: it.type, color: it.color });
-              }}
-            />
-          )}
+      {/* dock: the selected menu over the tab bar */}
+      {depth !== "COLOR_PALETTE" && (
+        <div className="absolute inset-x-0 bottom-0 z-10 rounded-t-xl bg-panel shadow-[0_-8px_24px_rgba(0,0,0,0.35)]" style={{ height: BOTTOM }}>
+          <div className="absolute inset-x-0 top-0" style={{ height: FEATURE_H }}>
+            {depth === "FOCUS" ? (
+              <FocusPanel
+                onReplace={() => fileRef.current?.click()}
+                onRight90={() => editFocused((x) => ({ ...x, rot90: (x.rot90 + 1) % 4 }))}
+                onMirror={() => editFocused((x) => ({ ...x, fh: !x.fh }))}
+                onFlip={() => editFocused((x) => ({ ...x, fv: !x.fv }))}
+              />
+            ) : (
+              <>
+                {menu === "LAYOUT" && (
+                  <LayoutPanel templates={templates} pack={pack} sel={sel} onPack={setPack} onLayout={(i) => applySel({ kind: "layout", pack: pack.id, index: i })} />
+                )}
+                {menu === "SEQUENCE" && <SequencePanel sel={sel} onHeight={() => applySel({ kind: "height" })} onWidth={() => applySel({ kind: "width" })} />}
+                {menu === "BORDER" && (
+                  <BorderPanel
+                    items={borderItems}
+                    current={borderColor}
+                    size={border}
+                    sizeEnabled={borderEditable(sel)}
+                    flashKey={flashKey}
+                    onSize={setBorder}
+                    dimmed={!!picker}
+                    onItem={(it) => {
+                      if (it.kind === "tool") {
+                        if (it.tool === "picker") startPicker();
+                        else setDepth("COLOR_PALETTE");
+                      } else setBorderColor({ type: it.type, color: it.color });
+                    }}
+                  />
+                )}
+              </>
+            )}
+          </div>
+          <div role="tablist" aria-label="Collage tools" className={cx("absolute inset-x-0 bottom-0 flex items-stretch justify-center gap-6 border-t border-line transition-opacity", depth === "FOCUS" && "pointer-events-none opacity-30")} style={{ height: MENU_H }}>
+            {MENUS.map((m) => {
+              const on = menu === m.id;
+              return (
+                <button key={m.id} type="button" role="tab" aria-selected={on} onClick={() => setMenu(m.id)} className={cx("oe-press relative flex w-[72px] flex-col items-center justify-center gap-1", on ? "text-fg" : "text-fg-3")}>
+                  <span className={cx("absolute top-0 h-[3px] w-6 rounded-b-full bg-accent transition-opacity", on ? "opacity-100" : "opacity-0")} />
+                  <Icon name={m.icon} size={21} />
+                  <span className="text-[11px] font-medium">{m.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* bottom menu: btn_sequence / btn_layout / btn_border */}
-      <div className="absolute inset-x-0 bottom-0 flex" style={{ height: MENU_H, padding: "0 30px" }}>
-        {(["SEQUENCE", "LAYOUT", "BORDER"] as Menu[]).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setMenu(m)}
-            className="flex-1"
-            style={{ fontSize: 15, color: menu === m ? "#ffffff" : "rgba(255,255,255,0.6)" }}
-          >
-            {m === "SEQUENCE" ? "Sequence" : m === "LAYOUT" ? "Layout" : "Border"}
-          </button>
-        ))}
-      </div>
-
-      {/* colour picker bubble (color_pick_layout: 50dp enlarge view + 10dp point, 19dp apart) */}
+      {/* colour picker loupe */}
       {picker && (
-        <div
-          className="pointer-events-none absolute z-30"
-          style={{ left: picker.x - 25, top: picker.y - (79 - 5), width: 50, height: 79, transformOrigin: "50% 100%", animation: "collage-pick 200ms" }}
-        >
-          <style>{"@keyframes collage-pick{from{transform:scale(0)}to{transform:scale(1)}}"}</style>
-          <span className="absolute left-0 top-0 rounded-full" style={{ width: 50, height: 50, background: picker.color, boxShadow: "inset 0 0 0 2.5px #ffffff" }} />
-          <span className="absolute rounded-full" style={{ left: 20, top: 69, width: 10, height: 10, background: picker.color, boxShadow: "inset 0 0 0 2.5px #ffffff" }} />
+        <div className="pointer-events-none absolute z-30" style={{ left: picker.x - 28, top: picker.y - 84, width: 56, height: 84, transformOrigin: "50% 100%", animation: "oe-pop 160ms var(--oe-ease)" }}>
+          <span className="absolute left-0 top-0 h-14 w-14 rounded-full ring-4 ring-white" style={{ background: picker.color, boxShadow: "0 4px 12px rgba(0,0,0,0.45)" }} />
+          <span className="absolute left-[23px] top-[72px] h-2.5 w-2.5 rounded-full ring-2 ring-white" style={{ background: picker.color }} />
         </div>
       )}
 
-      {/* fragment_2depth_container */}
-      {depth === "FOCUS" && (
-        <div className="absolute inset-x-0 bottom-0 z-20" style={{ height: BOTTOM }}>
-          <FocusPanel
-            onReplace={() => fileRef.current?.click()}
-            onRight90={() => editFocused((x) => ({ ...x, rot90: (x.rot90 + 1) % 4 }))}
-            onMirror={() => editFocused((x) => ({ ...x, fh: !x.fh }))}
-            onFlip={() => editFocused((x) => ({ ...x, fv: !x.fv }))}
-            onCancel={focusCancel}
-            onConfirm={focusConfirm}
-          />
-        </div>
-      )}
+      {depth === "FOCUS" && <PageBar title="Photo" onCancel={focusCancel} onConfirm={focusConfirm} />}
       {depth === "COLOR_PALETTE" && (
         <div className="absolute inset-0 z-20">
           <PalettePanel
@@ -542,30 +529,23 @@ export function CollageScreen({ ids, dev }: { ids: string[]; dev?: CollageDev })
       )}
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void onReplaceFile(e.target.files?.[0]); e.target.value = ""; }} />
 
-      {/* group_loading */}
       {loading && (
         <>
           <div className="absolute inset-0 z-40" />
-          <div
-            className="absolute z-40 flex items-center justify-center"
-            style={{ left: region.x + region.w / 2 - 60, top: region.y + region.h / 2 - 60, width: 120, height: 120, borderRadius: 12, background: "rgba(0,0,0,0.6)" }}
-          >
-            <span style={{ display: "inline-flex", filter: "brightness(0) invert(1)" }}><LottieLoading size={40} /></span>
+          <div className="absolute z-40 flex items-center gap-3 rounded-lg bg-panel px-5 py-4 shadow-2xl ring-1 ring-line" style={{ left: "50%", top: region.y + region.h / 2, transform: "translate(-50%, -50%)" }}>
+            <Spinner size={22} className="text-accent" />
+            <span className="whitespace-nowrap text-[15px] font-medium">{saveLoading ? "Saving full size…" : "Loading photos…"}</span>
           </div>
         </>
       )}
 
-      <Toast text={toast} />
-
-      {alert && (
-        <AlertDialog
-          message="Are you sure you want to leave without saving?"
-          cancel="Cancel"
-          ok="Leave"
-          onCancel={() => setAlert(false)}
-          onOk={() => { setAlert(false); leave(); }}
-        />
-      )}
+      <Dialog
+        open={alert} onClose={() => setAlert(false)} icon="trash" destructive
+        title={sel.kind === "none" ? "Leave the collage?" : "Discard this collage?"}
+        confirm={sel.kind === "none" ? "Leave" : "Discard"} cancel="Keep editing" onConfirm={leave}
+      >
+        {sel.kind === "none" ? "Nothing has been laid out yet." : "You haven't saved it yet. Leaving now throws it away."}
+      </Dialog>
 
       {saved && (
         <CollageConfirm

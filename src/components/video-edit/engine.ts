@@ -238,7 +238,7 @@ export class VideoEngine {
   }
 
   /**
-   * C14780f save: replays the section at the original resolution into an offscreen renderer and records it.
+   * Save: replays the section at the original resolution into an offscreen renderer and records it.
    * MediaRecorder (mp4/H.264 where supported, else WebM VP9/VP8) with the original sound unless muted/reversed.
    */
   async export(onProgress: (p: number) => void, signal: { cancelled: boolean }): Promise<{ blob: Blob; width: number; height: number; duration: number }> {

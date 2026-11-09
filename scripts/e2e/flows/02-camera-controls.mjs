@@ -1,145 +1,123 @@
-import { openCamera, hasImg, textOn } from "../h.mjs";
+import { openCamera, textOn, camReady } from "../h.mjs";
 
-const vmenuIcon = (prefix) => `[...document.querySelectorAll('img')].filter(i => i.src.includes('/${prefix}') && i.getBoundingClientRect().width > 0).map(i => i.src.split('/').pop()).join(',')`;
+const label = (prefix) => `[...document.querySelectorAll('button[aria-label]')].map(b => b.getAttribute('aria-label')).find(l => l.startsWith(${JSON.stringify(prefix)})) ?? ''`;
+const checked = (name) => `document.querySelector('[role=switch][aria-label=${JSON.stringify(name)}]')?.getAttribute('aria-checked') ?? ''`;
 const PREVIEW = [195, 330]; // empty preview area (tap closes panels)
 
 export default async function flowCameraControls(s) {
   await openCamera(s, { fresh: true });
 
   await s.step("more-panel", async () => {
-    await s.click("More");
-    await s.waitVisible("Night mode"); await s.waitVisible("Auto save"); await s.waitVisible("Makeup");
-    await s.waitVisible("Touch"); await s.waitVisible("Settings");
-    // toggle Auto save switch and back
-    const before = await s.ev(`[...document.querySelectorAll('[role=switch]')].map(x => x.getAttribute('aria-checked')).join()`);
-    await s.click("Auto save");
-    const after = await s.ev(`[...document.querySelectorAll('[role=switch]')].map(x => x.getAttribute('aria-checked')).join()`);
-    if (before === after) throw new Error("Auto save switch did not toggle");
-    await s.click("Auto save");
-  });
-  await s.step("more-panel-timer-touch", async () => {
-    const t0 = await s.ev(vmenuIcon("menu_more_timer"));
-    await s.click("Timer", { within: null, nth: 0 });
-    const t1 = await s.ev(vmenuIcon("menu_more_timer"));
-    if (t0 === t1) throw new Error(`More>Timer icon did not change (${t0})`);
-    await s.click("Touch"); await s.waitVisible("Touch the screen to start shooting.", { timeout: 3000 });
-    await s.click("Touch");
-    // back to timer off
-    while (!(await s.ev(vmenuIcon("menu_more_timer_off")))) await s.click("Timer");
-    await s.tapAt(195, 520); // tapping the preview closes the More panel
-    await s.sleep(700);
-    await s.waitFor(`!(${hasImg("menu_more_setting")})`, { timeout: 3000, msg: "more closed" });
+    await s.click({ label: "More options" });
+    for (const t of ["Tap to shoot", "Makeup", "Night light", "Auto-save", "Camera settings"]) await s.waitVisible(t, { timeout: 3000 });
+    const before = await s.ev(checked("Auto-save"));
+    await s.click("Auto-save", { settle: 500 });
+    const after = await s.ev(checked("Auto-save"));
+    if (before === after) throw new Error(`Auto-save did not toggle (${before})`);
+    await s.click("Auto-save", { settle: 500 });
+    await s.tapAt(...PREVIEW); await s.sleep(700);
+    await s.waitFor(`!${textOn("Camera settings")}`, { timeout: 3000, msg: "more closed" });
   });
 
   await s.step("flash-cycle", async () => {
-    const seen = new Set([await s.ev(vmenuIcon("icon_vertical_flash")) + await s.ev(vmenuIcon("icon_vertical_torch"))]);
-    for (let i = 0; i < 3; i++) { await s.click("Flash"); seen.add(await s.ev(vmenuIcon("icon_vertical_flash")) + await s.ev(vmenuIcon("icon_vertical_torch"))); }
-    if (seen.size < 2) throw new Error("flash icon never changed: " + [...seen]);
-    // return to off
-    for (let i = 0; i < 4 && !(await s.ev(vmenuIcon("icon_vertical_flash_off"))); i++) await s.click("Flash");
+    const seen = new Set([await s.ev(label("Flash"))]);
+    for (let i = 0; i < 3; i++) { await s.click({ label: await s.ev(label("Flash")) }, { settle: 400 }); seen.add(await s.ev(label("Flash"))); }
+    if (seen.size < 2) throw new Error("flash never changed: " + [...seen]);
+    for (let i = 0; i < 4 && (await s.ev(label("Flash"))) !== "Flash: off"; i++) await s.click({ label: await s.ev(label("Flash")) }, { settle: 400 });
   });
 
   await s.step("timer-cycle", async () => {
-    await s.click("Timer");
-    await s.waitFor(hasImg("icon_vertical_timer_3"), { timeout: 2000, msg: "timer 3s icon" });
-    await s.click("Timer");
-    await s.waitFor(hasImg("icon_vertical_timer_7"), { timeout: 2000, msg: "timer 7s icon" });
-    await s.click("Timer");
-    await s.waitFor(`!(${hasImg("icon_vertical_timer_7")}) && !(${hasImg("icon_vertical_timer_3")})`, { timeout: 2000, msg: "timer off" });
+    const seen = [];
+    for (let i = 0; i < 4; i++) {
+      seen.push(await s.ev(label("Timer")));
+      if (i && seen[i] === "Timer off") break;
+      await s.click({ label: seen[i] }, { settle: 400 });
+    }
+    if (new Set(seen).size < 2) throw new Error("timer never changed: " + seen);
+    for (let i = 0; i < 4 && (await s.ev(label("Timer"))) !== "Timer off"; i++) await s.click({ label: await s.ev(label("Timer")) }, { settle: 400 });
   });
 
-  await s.step("ratio-pill", async () => {
-    await s.click("Ratio");
-    await s.waitVisible({ label: "1:1" }, { timeout: 3000 });
-    await s.click({ label: "1:1" }, { settle: 1200 });
-    await s.waitFor(`localStorage.getItem('b612.camera.ratio')?.includes('1:1') || ${hasImg("icon_vertical_ratio_1_1")} || [...document.querySelectorAll('img')].some(i=>/ratio.*1.?1/.test(i.src))`, { timeout: 3000, msg: "ratio 1:1 selected" });
+  await s.step("frame-1-1", async () => {
+    await s.click({ label: await s.ev(label("Frame")) });
+    await s.click("1:1", { settle: 1200 });
+    await s.waitFor(`${label("Frame")} === 'Frame: 1:1'`, { timeout: 3000, msg: "frame 1:1" });
   });
-  await s.step("ratio-back-full", async () => {
-    await s.click("Ratio");
-    await s.click({ label: "9:16" }, { settle: 1200 });
+  await s.step("frame-back-9-16", async () => {
+    await s.click({ label: "Frame: 1:1" });
+    await s.click("9:16", { settle: 1200 });
+    await s.waitFor(`${label("Frame")} === 'Frame: 9:16'`, { timeout: 3000, msg: "frame 9:16" });
   });
 
   await s.step("bounce", async () => {
-    await s.ev(`(document.querySelector('[aria-label=collapse]')?.parentElement?.querySelector('.no-scrollbar, [class*=overflow-y]') ?? null)?.scrollTo?.(0, 999)`);
-    await s.click("Bounce");
-    await s.waitFor(hasImg("icon_vertical_bounce_on"), { timeout: 2000, msg: "bounce on" });
-    await s.click("Bounce");
-    await s.waitFor(hasImg("icon_vertical_bounce_off"), { timeout: 2000, msg: "bounce off" });
+    await s.click({ label: "Bounce off" }, { settle: 600 });
+    await s.waitFor(`!!document.querySelector('[aria-label^="Bounce on"], [aria-label="Bounce"][aria-pressed=true]')`, { timeout: 2000, msg: "bounce on" });
+    await s.click({ label: await s.ev(label("Bounce")) }, { settle: 600 });
+    await s.waitFor(`!!document.querySelector('[aria-label="Bounce off"]')`, { timeout: 2000, msg: "bounce off" });
   });
 
-  await s.step("layout-grid", async () => {
-    await s.click("Layout");
-    await s.waitVisible({ label: "ONE_BY_TWO" }, { timeout: 3000 });
-    await s.click({ label: "ONE_BY_TWO" });
-    await s.waitVisible("Change", { timeout: 3000 });
-    await s.click("Layout"); // LAYOUT_ON (closeMark) turns it off
-    await s.waitVisible("Bounce", { timeout: 3000 });
+  await s.step("collage-mode", async () => {
+    await s.click({ label: "Collage" }, { settle: 800 });
+    await s.waitVisible({ label: "Leave collage" }, { timeout: 3000 });
+    await s.click({ label: "Side by side" }, { settle: 800 });
+    await s.waitFor(`${label("Layout")} === 'Layout: Side by side'`, { timeout: 3000, msg: "layout chosen" });
+    await s.click({ label: "Leave collage" }, { settle: 800 });
+    await s.waitVisible({ label: "Collage" }, { timeout: 3000 });
   });
 
   await s.step("music", async () => {
-    await s.click("Music");
-    await s.waitVisible("Add Music", { timeout: 4000 });
-    await s.click({ label: "close" });
-    await s.waitFor(`!${textOn("Add Music")}`, { timeout: 3000, msg: "music closed" });
-  });
-
-  await s.step("vertical-collapse-expand", async () => {
-    await s.click({ label: "collapse" }, { settle: 700 });
-    await s.waitVisible({ label: "expand" }, { timeout: 2000 });
-    await s.click({ label: "expand" }, { settle: 700 });
-    await s.waitVisible("More", { timeout: 2000 });
+    await s.click({ label: "Music" });
+    await s.waitVisible("No music", { timeout: 4000 });
+    await s.waitFor(`document.querySelectorAll('[aria-label="Play preview"]').length > 0`, { timeout: 6000, msg: "built-in tracks listed" });
+    await s.click({ label: "Close" });
+    await s.waitFor(`!${textOn("No music")}`, { timeout: 3000, msg: "music closed" });
   });
 
   await s.step("filter-panel", async () => {
-    await s.click("Filter");
+    await s.click("Filters");
     await s.waitVisible("Original", { timeout: 4000 });
-    await s.click("Milk", { settle: 1200 });
-    await s.waitVisible("Milk", { timeout: 2500 }); // filter-name toast or the item
-    await s.click("Jelly", { settle: 900 });
-    await s.click("BASIC").catch(() => {});
+    await s.click("Peach", { settle: 1200 });
+    await s.click("Mint", { settle: 900 });
   });
-  await s.step("filter-inventory", async () => {
-    await s.click({ label: "more" }, { settle: 900 });
-    await s.waitVisible("Filters", { timeout: 4000 });
-    await s.click({ label: "favorite" });
-    await s.click({ label: "favorite" });
-    await s.key("Escape");
-    await s.waitFor(`!${textOn("Filters\n")} && ![...document.querySelectorAll('div')].some(d => d.innerText === 'Filters' && d.getBoundingClientRect().width > 0)`, { timeout: 3000, msg: "inventory closed" });
+  await s.step("filter-manage", async () => {
+    await s.click({ label: "Manage filters" }, { settle: 900 });
+    await s.waitVisible("Manage filters", { timeout: 4000 });
+    await s.waitVisible("All filters", { exact: false, timeout: 4000 });
+    await s.click("Done", { settle: 800 });
   });
   await s.step("filter-original-close", async () => {
+    if (!(await s.exists("Original"))) await s.click("Filters");
     await s.click("Original", { settle: 800 });
-    await s.click({ label: "close" }, { settle: 800 });
+    await s.click({ label: "Close filters" }, { settle: 800 });
     await s.waitVisible("Beauty", { timeout: 3000 });
   });
 
   await s.step("beauty-tabs", async () => {
     await s.click("Beauty", { settle: 900 });
-    for (const t of ["Advanced", "Makeup", "Beauty"]) { await s.click(t, { settle: 700, nth: 0 }); }
-    await s.click({ label: "close" }, { settle: 800 });
+    for (const t of ["Fine-tune", "Makeup", "Beauty"]) await s.click(t, { settle: 700, nth: 0 });
+    await s.click({ label: "Close beauty" }, { settle: 800 });
     await s.waitVisible("Effects", { timeout: 3000 });
   });
 
   await s.step("effects", async () => {
     await s.click("Effects", { settle: 1500 });
-    await s.waitVisible({ label: "none" }, { timeout: 4000 });
-    const n = await s.ev(`document.querySelectorAll('img[src*="sticker"], img[src*="thumb"]').length`);
-    if (!n) throw new Error("no effect thumbnails");
-    await s.tapAt(...PREVIEW); await s.sleep(800);
+    await s.waitVisible("None", { timeout: 4000 });
+    for (const t of ["Featured", "Cute", "Face paint"]) await s.click(t, { settle: 500 });
+    const n = await s.ev(`document.querySelectorAll('[data-sticker]').length`);
+    if (!n) throw new Error("no effect tiles");
+    await s.click({ label: "Close effects" }, { settle: 800 });
     await s.waitVisible("Effects", { timeout: 3000 });
   });
 
   await s.step("mode-video", async () => {
-    await s.click("VIDEO", { settle: 900 });
-    await s.waitVisible("Duration", { timeout: 3000 });
-    await s.click("Duration");
-    await s.waitVisible("15m", { timeout: 2000 });
-    await s.click("30m", { settle: 600 });
-    await s.click("NORMAL", { settle: 900 });
-    await s.waitVisible("Bounce", { timeout: 3000 }).catch(async () => s.waitVisible("Ratio"));
+    await s.click("Video", { settle: 900 });
+    await s.waitFor(`!!document.querySelector('[aria-label="Record video"]')`, { timeout: 3000, msg: "video shutter" });
+    await s.click({ label: await s.ev(label("Max length")) }, { settle: 600 });
+    await s.click("Photo", { settle: 900 });
+    await s.waitFor(`!!document.querySelector('[aria-label="Take photo"]')`, { timeout: 3000, msg: "photo shutter" });
   });
 
   await s.step("switch-camera", async () => {
-    await s.click({ label: "switch camera" }, { settle: 1500 });
-    await s.assert(`!!document.querySelector('[aria-label="shutter"]')`, "still on camera");
+    await s.click({ label: "Switch camera" }, { settle: 1500 });
+    await s.waitFor(camReady, { timeout: 8000, msg: "still on camera" });
   });
 }

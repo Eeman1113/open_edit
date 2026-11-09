@@ -1,5 +1,5 @@
-// Client-side bitmap effects standing in for the native Kuru "special textures" (mosaic / blur brushes,
-// skin retouch brushes, DSLR lens blur, local inpaint). All operate on 2D canvases.
+// Bitmap effects for the brush tools (pixelate / blur brushes, retouch brushes, depth blur, local fill).
+// All operate on 2D canvases.
 import { clamp, lerp, newCanvas } from "./common";
 
 type Src = HTMLCanvasElement;
@@ -53,47 +53,41 @@ function sampler(src: Src, cell: number) {
 }
 
 /**
- * MOSAIC_Triangle / MOSAIC_Hexagon: JS port of libkuru res/shaders/mosaic_brush.frag (verbatim maths). `base` is
- * u_mosaicSize in texture-width units; texture y is divided by u_aspect (= width / height) so the lattice is
- * isotropic. Each pixel takes the colour of the nearest lattice vertex (hexagon) or of the triangle centre picked by
- * the GLSL single-argument atan sectors (triangle).
+ * Polygon mosaics. `base` is the cell size as a fraction of the image width. Every pixel takes the colour at the centre
+ * of the cell it falls in:
+ *  - hex: pointy-top hexagons; pixel -> axial coordinates -> cube rounding -> hexagon centre.
+ *  - tri: equilateral triangles; pixel -> skewed lattice (u, v); the cell's lower-left or upper-right half picks the
+ *    triangle, whose centroid is mapped back to pixels.
  */
 export function polyMosaic(src: Src, base: number, shape: "tri" | "hex"): Src {
   const W = src.width, H = src.height;
-  const sg = src.getContext("2d", { willReadFrequently: true })!;
-  const sd = sg.getImageData(0, 0, W, H).data;
+  const sd = src.getContext("2d", { willReadFrequently: true })!.getImageData(0, 0, W, H).data;
   const c = newCanvas(W, H);
   const g = c.getContext("2d")!;
   const out = g.createImageData(W, H);
   const od = out.data;
-  const aspect = W / H;
-  const TR = 0.866025, TB = 1.5, PI6 = 0.523599;
-  const b = base;
+  const R3 = Math.sqrt(3);
+  const r = Math.max(2, base * W * (shape === "hex" ? 1 : 1.4));
   for (let py = 0; py < H; py++) {
     for (let px = 0; px < W; px++) {
-      const x = (px + 0.5) / W;
-      const y = (py + 0.5) / H / aspect;
-      const wx = Math.trunc(x / TB / b), wy = Math.trunc(y / TR / b);
-      let v1x: number, v1y: number, v2x: number, v2y: number;
-      const evenX = (wx & 1) === 0, evenY = (wy & 1) === 0;
-      if (evenX === evenY) {
-        v1x = b * 1.5 * wx; v1y = b * TR * wy; v2x = b * 1.5 * (wx + 1); v2y = b * TR * (wy + 1);
+      const x = px + 0.5, y = py + 0.5;
+      let cx: number, cy: number;
+      if (shape === "hex") {
+        // fractional axial coordinates of a pointy-top hex grid, then round in cube space
+        const q = ((R3 / 3) * x - y / 3) / r, rr = ((2 / 3) * y) / r, sq = -q - rr;
+        const rs = Math.round(sq);
+        let rq = Math.round(q), rv = Math.round(rr);
+        const dq = Math.abs(rq - q), ds = Math.abs(rs - sq), dr = Math.abs(rv - rr);
+        if (dq > dr && dq > ds) rq = -rv - rs; else if (dr > ds) rv = -rq - rs;
+        cx = r * R3 * (rq + rv / 2); cy = r * 1.5 * rv;
       } else {
-        v1x = b * 1.5 * wx; v1y = b * TR * (wy + 1); v2x = b * 1.5 * (wx + 1); v2y = b * TR * wy;
+        const v = (2 * y) / (R3 * r), u = x / r - v / 2;
+        const i = Math.floor(u), j = Math.floor(v);
+        const upper = u - i + (v - j) > 1;
+        const cu = i + (upper ? 2 / 3 : 1 / 3), cv = j + (upper ? 2 / 3 : 1 / 3);
+        cx = (cu + cv / 2) * r; cy = (cv * R3 * r) / 2;
       }
-      const s1 = Math.hypot(v1x - x, v1y - y), s2 = Math.hypot(v2x - x, v2y - y);
-      let vx = s1 < s2 ? v1x : v2x, vy = s1 < s2 ? v1y : v2y;
-      if (shape === "tri") {
-        const a = Math.atan((x - vx) / (y - vy));
-        const h2 = (b * TR) / 2, w2 = b / 2;
-        if (a >= PI6 && a < PI6 * 3) { vy -= h2; }
-        else if (a >= PI6 * 3 && a < PI6 * 5) { vx += w2; vy -= h2; }
-        else if ((a >= PI6 * 5 && a <= PI6 * 6) || (a < -PI6 * 5 && a > -PI6 * 6)) { vx += w2; vy += h2; }
-        else if (a < -PI6 * 3 && a >= -PI6 * 5) { vy += h2; }
-        else if (a <= -PI6 && a > -PI6 * 3) { vx -= w2; vy += h2; }
-        else if (a > -PI6 && a < PI6) { vx -= w2; vy -= h2; }
-      }
-      const sx = clamp(Math.floor(vx * W), 0, W - 1), sy = clamp(Math.floor(vy * aspect * H), 0, H - 1);
+      const sx = clamp(Math.floor(cx), 0, W - 1), sy = clamp(Math.floor(cy), 0, H - 1);
       const si = (sy * W + sx) * 4, oi = (py * W + px) * 4;
       od[oi] = sd[si]; od[oi + 1] = sd[si + 1]; od[oi + 2] = sd[si + 2]; od[oi + 3] = sd[si + 3];
     }
@@ -102,7 +96,7 @@ export function polyMosaic(src: Src, base: number, shape: "tri" | "hex"): Src {
   return c;
 }
 
-/** MOSAIC_OIL: overlapping oriented dabs sampled from a softened copy (oil-paint look). */
+/** Paint: overlapping oriented dabs sampled from a softened copy. */
 export function oil(src: Src, cell: number): Src {
   const base = blurCanvas(src, cell * 0.25);
   const c = newCanvas(src.width, src.height);
@@ -124,7 +118,7 @@ export function oil(src: Src, cell: number): Src {
   return c;
 }
 
-/** BLUR_Motion / BLUR_Horizontal: averaged offset copies along an angle. */
+/** Motion / streak blur: averaged offset copies along an angle. */
 export function directional(src: Src, len: number, angle: number): Src {
   const c = newCanvas(src.width, src.height);
   const g = c.getContext("2d")!;
@@ -138,7 +132,7 @@ export function directional(src: Src, len: number, angle: number): Src {
   return c;
 }
 
-/** kuru-shaders/074.glsl tint: s = mix(s*c, overlay(s, c), 0.8). */
+/** Colour tint: the multiplied colour with 80% of the overlay-blended colour on top. */
 export function tint(src: Src, color: string): Src {
   const mul = newCanvas(src.width, src.height);
   const mg = mul.getContext("2d")!;
@@ -168,9 +162,7 @@ export const isBlurType = (t: MosaicType) => t.startsWith("BLUR") || t.startsWit
 
 export function mosaicEffect(src: Src, type: MosaicType, intensity: number, color: string | null, filter: number): Src {
   const m = Math.min(src.width, src.height);
-  // KuruBrushWrapperNode: size = lerp(0x1498, 0x149c, intensity) with the constructor constants 0.01 / 0.05, in
-  // units of the buffer width. Square = a (1/size)-cells-wide buffer sampled NEAREST (buildMosaicBuffer); polygons =
-  // mosaic_brush.frag with u_mosaicSize = size (triangle) or size * 0.5 (hexagon) (buildMosaicPolygonBuffer).
+  // cell size: 1% to 5% of the image width with the Block size slider
   const size = lerp(0.01, 0.05, clamp(intensity, 0, 1));
   let s: Src;
   switch (type) {
@@ -195,8 +187,8 @@ export function mosaicEffect(src: Src, type: MosaicType, intensity: number, colo
 /* ------------------------------------------------------------------ local inpaint (Remove, standard) */
 
 /**
- * Fill the masked pixels from their surroundings: coarse-to-fine pyramid diffusion (a cheap stand-in for the
- * on-device TFLite inpaint model / cv::inpaint fallback). `mask` is white where pixels must be replaced.
+ * Fill the masked pixels from their surroundings with coarse-to-fine pyramid diffusion (a quick local fill).
+ * `mask` is white where pixels must be replaced.
  */
 export function inpaint(src: Src, mask: Src): Src {
   const W = src.width, H = src.height;
@@ -284,7 +276,8 @@ export function inpaint(src: Src, mask: Src): Src {
 export interface DslrParams { strength: number; focus: number; depth: number; edges: number; fx: number; fy: number }
 
 /** Strength value (0.01..1) -> f-stop via the piecewise index map (0.01 -> f/22, 0.6 -> f/4, 1 -> f/1.4). */
-export const F_STOPS = [22, 20, 18.8, 17.6, 16.4, 15.2, 14, 12.8, 11.6, 10.4, 9.2, 8, 7.6, 7.2, 6.8, 6.4, 6, 5.6, 5.2, 4.8, 4.4, 4, 3.8, 3.6, 3.4, 3.2, 3, 2.8, 2.6, 2.4, 2.2, 2, 1.8, 1.6, 1.4];
+/** Aperture ruler: 35 f-numbers on a geometric scale from f/22 (no blur) to f/1.4 (strongest blur). */
+export const F_STOPS = Array.from({ length: 35 }, (_, i) => Math.round(22 * Math.pow(1.4 / 22, i / 34) * 10) / 10);
 export const strengthToIndex = (v: number) => (v <= 0.6 ? ((v - 0.01) / 0.59) * 21 : 21 + ((v - 0.6) / 0.4) * 13);
 export const indexToStrength = (i: number) => (i <= 21 ? 0.01 + (i / 21) * 0.59 : 0.6 + ((i - 21) / 13) * 0.4);
 

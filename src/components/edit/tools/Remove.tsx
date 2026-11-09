@@ -1,23 +1,23 @@
 "use client";
 
-// EPRemoveFragment (fragment_edit_photo_tools_remove.xml, the AI-capable variant). Both modes run on-device with
-// MI-GAN (src/lib/ai, MIT) in place of the TFLite inpaint model and the moon.snow.me inpaint server:
-// - Standard: each stroke is removed on touch-up ("In progress…").
-// - AI Remove: strokes build one mask, "Create" removes it with the EditAiLoading progress; one undo entry.
-// Previews run on the editor snapshot; Confirm replays every step on the full-resolution base.
+// Erase: paint over something to remove it. Both modes run MI-GAN on device (src/lib/ai, MIT):
+// - Quick: each stroke is filled in as soon as you lift your finger.
+// - Smart: paint a whole area first, then tap Generate to fill it in one go (one undo step).
+// Previews run on the editor snapshot; Apply replays every step on the full-size photo.
 import { useEffect, useRef, useState } from "react";
+import { TOKENS, toast } from "@/components/ui";
 import { inpaintCanvas, type CallOpts } from "@/lib/ai";
 import { useEdit } from "../ctx";
-import { CtrlIcon, EditSeekBar, FeatureButton } from "../ui";
+import { ControlRow, EditSeekBar, FeatureButton } from "../ui";
 import {
-  AiLoading, BrushRing, CreateButton, EditLoading, lerp, MENU, newCanvas, OptionRow, Panel, PhotoOverlay, RetryView, S,
+  AiLoading, BrushRing, CreateButton, EditLoading, lerp, MENU, newCanvas, OPTION_H, OptionRow, Panel, PhotoOverlay, RetryView, S,
   strokeMask, TextTooltip, useHold, usePhotoArea, usePhotoSnapshot, useStrokeInput, useTimedTooltip, type MStroke } from "./common";
 import { aiStepText, useAiJob, useAsyncBake } from "./aiCommon";
 
-const MASK = "rgba(11,212,210,0.5)";
-const NEW_KEY = "b612.edit.remove.aiNew";
-const TIP_KEY = "b612.edit.remove.aiTip";
-const GEN_KEY = "b612.edit.remove.genTip";
+const MASK = `${TOKENS.color.accent}88`;
+const NEW_KEY = "oe.edit.erase.smartSeen";
+const TIP_KEY = "oe.edit.erase.tipSeen";
+const GEN_KEY = "oe.edit.erase.generateSeen";
 
 /** One history step: the strokes removed together (Standard = 1 stroke, AI = the whole mask). */
 interface Step { strokes: MStroke[]; c: HTMLCanvasElement }
@@ -33,7 +33,7 @@ const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { r
 const lsSet = (k: string) => { try { localStorage.setItem(k, "1"); } catch { /* private mode */ } };
 
 export function RemoveTool() {
-  const { openSub, toast } = useEdit();
+  const { openSub } = useEdit();
   const area = usePhotoArea();
   const asyncBake = useAsyncBake();
   const [held, hold] = useHold();
@@ -56,11 +56,11 @@ export function RemoveTool() {
   const diameter = lerp(23, 100, size);
   const r = diameter / 2 / Math.max(1, area.w);
 
-  // first run: "Perfect removal with AI!" for 2s
+  // first run: a short how-to
   useEffect(() => {
     if (lsGet(TIP_KEY) !== null) return;
     lsSet(TIP_KEY);
-    setTip("Perfect removal with AI!");
+    setTip("Paint over anything you want gone");
   }, [setTip]);
 
   const current = hist.i > 0 ? hist.list[hist.i - 1].c : src;
@@ -93,7 +93,7 @@ export function RemoveTool() {
   useStrokeInput(area, (u, v) => (busy || job.busy || baking ? null : { pts: [u, v], r }), setLive, (s) => {
     if (mode === "ai") {
       setMask((m) => { const list = [...m.list.slice(0, m.i), s]; return { list, i: list.length }; });
-      if (lsGet(GEN_KEY) === null) { lsSet(GEN_KEY); setTip("Press the button to generate"); }
+      if (lsGet(GEN_KEY) === null) { lsSet(GEN_KEY); setTip("Tap Generate when the area is covered"); }
       return;
     }
     setBusy(true);
@@ -133,7 +133,7 @@ export function RemoveTool() {
       });
     } catch (e) {
       console.warn("[ai] remove bake failed", e);
-      toast(S.networkConnect);
+      toast(S.networkConnect, { icon: "alert", tone: "danger" });
       setBaking(false);
     }
   };
@@ -148,26 +148,25 @@ export function RemoveTool() {
         <BrushRing at={sizing ? { x: area.x + area.w / 2, y: area.y + area.h / 2 } : ring} r={diameter / 2} />
       </PhotoOverlay>
       {(busy || baking) && <EditLoading text={S.inProgress} />}
-      <TextTooltip text={tip} bottom={MENU + 108} />
-      {retry && <RetryView text={S.networkConnect} onRetry={retry} bottom={MENU + 108} />}
-      <div className="absolute inset-x-0 z-20 flex items-center" style={{ bottom: MENU + 54, height: 54 }} onPointerDown={(e) => e.stopPropagation()}>
-        <CtrlIcon name="undo" enabled={undo.can} onClick={undo.on} style={{ marginLeft: 10 }} />
-        <CtrlIcon name="redo" enabled={redo.can} onClick={redo.on} style={{ marginLeft: 10 }} />
-        <span className="flex-1" />
-        <CtrlIcon name="original" enabled={hist.i > 0} onHold={hold} style={{ marginRight: 10 }} />
-      </div>
-      <OptionRow bottom={MENU} label="Size" labelWidth={63}>
-        <EditSeekBar style={{ marginLeft: 10, marginRight: 52 }} value={size} min={0.01} max={1} def={0.2} onChange={(v) => { setSizing(true); setSize(v); }} onRelease={() => setSizing(false)} />
+      <TextTooltip text={tip} bottom={MENU + OPTION_H + 56} />
+      {retry && <RetryView text={S.networkConnect} onRetry={retry} bottom={MENU + OPTION_H + 56} />}
+      <ControlRow bottom={MENU + OPTION_H} undo={undo} redo={redo} onOriginal={hold} originalEnabled={hist.i > 0} />
+      <OptionRow bottom={MENU} label="Brush size">
+        <EditSeekBar value={size} min={0.01} max={1} def={0.2} onChange={(v) => { setSizing(true); setSize(v); }} onRelease={() => setSizing(false)} />
       </OptionRow>
       <Panel
-        title="Remove" guide onClose={() => openSub(null)}
+        title="Erase" onClose={() => openSub(null)}
         confirmNode={inAi && maskStrokes.length ? <CreateButton onClick={() => void create()} /> : undefined}
         onConfirm={() => void confirm()}
       >
-        <div className="absolute inset-x-0 top-0 flex items-center justify-center" style={{ bottom: 52 }}>
-          <FeatureButton icon="icon_edit_tab_remove" label="Standard" selected={mode === "standard"} onClick={() => pickMode("standard")} />
-          <span style={{ width: 52 }} />
-          <FeatureButton icon="icon_edit_tab_ai_remove" label="AI Remove" selected={mode === "ai"} isNew={aiNew} onClick={() => pickMode("ai")} />
+        <div className="flex h-full flex-col items-center justify-center gap-3">
+          <div className="flex gap-3">
+            <FeatureButton icon="remove" label="Quick" selected={mode === "standard"} onClick={() => pickMode("standard")} />
+            <FeatureButton icon="sparkles" label="Smart area" selected={mode === "ai"} isNew={aiNew} onClick={() => pickMode("ai")} />
+          </div>
+          <p className="px-8 text-center text-[12px] leading-snug text-fg-3">
+            {inAi ? "Paint the whole area, then tap Generate. Best for bigger objects." : "Each stroke is erased as soon as you lift your finger."}
+          </p>
         </div>
       </Panel>
       {job.pct !== null && <AiLoading text={aiStepText(job.pct)} onCancel={job.cancel} />}

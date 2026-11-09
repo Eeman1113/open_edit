@@ -1,10 +1,9 @@
 "use client";
 
-// Overlay layers: Stickers (STAMP), Text, Brush item-content pages, their Add / Adjust / Eraser pages,
-// the on-canvas gizmo and the top-bar layer list popup.
-import { BASE } from "@/lib/base";
+// Overlay layers: the Stickers, Text and Draw tabs, their add pages, the per-layer Adjust and Erase pages, the
+// on-photo handles (move, scale, rotate) and the layer list that opens from the top bar.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { d } from "@/components/ui/legacy-drawable";
+import { Button, Icon, Tabs, cx } from "@/components/ui";
 import { useEdit } from "../ctx";
 import {
   BLENDS, BRUSH_COLORS, DEFAULT_TEXT_STYLE, LAYER_ADJUST_ITEMS, TEXT_COLORS, ZERO_LAYER_ADJUST,
@@ -12,14 +11,26 @@ import {
 } from "../model";
 import { drawStrokes, FONTS, loadBrushTextures, rasterLayer, textCanvas } from "../pipeline";
 import { markStampShopTooltipShown, StampShop, StampShopBalloon, stampShopTooltipPending } from "./StampShop";
-import { AlertDialog, ColorChip, ControlRow, EditSeekBar, FeatureButton, FeatureList, Img, TitleBar, Tint } from "../ui";
+import { addedPacks, STAMP_PACKS } from "../stamps";
+import {
+  AlertDialog, ChipRow, ColorChip, ControlRow, Dock, EditBar, EditSeekBar, FeatureButton, FeatureList, MENU, PanelArea,
+  SliderRow, SwatchTool, ToolChip, TOP_H,
+} from "../ui";
 
 type Kind = Layer["kind"];
 const ADD_SUB = { stamp: "stamp-add", text: "text-add", brush: "brush-add" } as const;
 const TAB_OF = { stamp: "STAMP", text: "TEXT", brush: "BRUSH" } as const;
+const KIND_LABEL = { stamp: "Sticker", text: "Text", brush: "Drawing" } as const;
 
 const updateLayer = (doc: Doc, id: number, fn: (l: Layer) => Layer): Doc => ({ ...doc, layers: doc.layers.map((l) => (l.id === id ? fn(l) : l)) });
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const sampleHex = (src: HTMLCanvasElement, x: number, y: number) => {
+  const c = document.createElement("canvas"); c.width = 1; c.height = 1;
+  const g = c.getContext("2d")!;
+  g.drawImage(src, Math.max(0, Math.min(src.width - 1, x * src.width)), Math.max(0, Math.min(src.height - 1, y * src.height)), 1, 1, 0, 0, 1, 1);
+  const p = g.getImageData(0, 0, 1, 1).data;
+  return `#${[p[0], p[1], p[2]].map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+};
 
 /** Selected layer of the given kind. */
 function useSelected(kind?: Kind) {
@@ -28,9 +39,9 @@ function useSelected(kind?: Kind) {
   return l && (!kind || l.kind === kind) ? l : undefined;
 }
 
-/** Kind of the Add page that was just closed (consumed by the LayerPanel that remounts right after). */
+/** Kind of the add page that was just closed (read by the tab panel that remounts right after it). */
 let addPageClosed: Kind | null = null;
-/** Mark the Add page of `kind` as closed when it unmounts (set in cleanup, cleared on (re)mount for StrictMode). */
+/** Marks the add page of `kind` as closed when it unmounts (set in cleanup, cleared on (re)mount for StrictMode). */
 function useAddPageExit(kind: Kind) {
   useEffect(() => {
     addPageClosed = null;
@@ -38,16 +49,16 @@ function useAddPageExit(kind: Kind) {
   }, [kind]);
 }
 
-/* ================================================================== item-content page */
+/* ================================================================== tab panel */
 
 export function LayerPanel({ kind }: { kind: Kind }) {
   const ctx = useEdit();
-  const { doc, setLive, commit, undo, redo, setOriginal, openSub, select, nextId } = ctx;
+  const { doc, setLive, commit, undo, setOriginal, openSub, select, nextId } = ctx;
   const layer = useSelected(kind);
   const [option, setOption] = useState<"opacity" | "blend" | null>(null);
 
-  // EPContent.*_ADD: with nothing to edit the tab opens straight into its Add page — only on entering the tab, not when
-  // that Add page was just closed (the panel remounts then; re-opening would trap the user in the Add page)
+  // With nothing to edit, entering the tab goes straight to its add page; not when that page was just closed
+  // (the panel remounts then, and reopening it would trap the user).
   const opened = useRef(false);
   useEffect(() => {
     if (opened.current) return;
@@ -60,22 +71,22 @@ export function LayerPanel({ kind }: { kind: Kind }) {
     else openSub(ADD_SUB[kind]);
   }, [doc.layers, kind, layer, openSub, select]);
 
-  const items = [
-    { id: "add", label: "add", icon: kind === "stamp" ? "icon_edit_tab_stamp" : kind === "text" ? "icon_edit_tab_text" : "icon_edit_tab_brush" },
-    ...(kind === "text" ? [{ id: "edit", label: "Edit", icon: "icon_edit_tab_text_edit" }] : []),
-    { id: "opacity", label: "Opacity", icon: "icon_edit_tab_opacity" },
-    { id: "blend", label: "Blend", icon: "icon_edit_tab_blend" },
-    { id: "eraser", label: "Eraser", icon: "icon_edit_tab_eraser" },
-    { id: "reset", label: "Reset", icon: "icon_edit_tab_reset" },
-    { id: "duplicate", label: "Duplicate", icon: "icon_edit_tab_copy" },
-    { id: "adjust", label: "Adjust", icon: "icon_edit_tab_adjust" },
-    { id: "mirror", label: "Mirror", icon: "icon_edit_tab_horizontal" },
-    { id: "delete", label: "Delete", icon: "icon_edit_tab_delete" },
+  const items: { id: string; label: string; icon: Parameters<typeof FeatureButton>[0]["icon"] }[] = [
+    { id: "add", label: kind === "stamp" ? "Add" : kind === "text" ? "New text" : "New drawing", icon: "plus" },
+    ...(kind === "text" ? [{ id: "edit", label: "Edit", icon: "pencil" as const }] : []),
+    { id: "opacity", label: "Opacity", icon: "droplet" },
+    { id: "blend", label: "Blend", icon: "filter" },
+    { id: "eraser", label: "Erase", icon: "remove" },
+    { id: "adjust", label: "Adjust", icon: "edit" },
+    { id: "mirror", label: "Mirror", icon: "flip-h" },
+    { id: "duplicate", label: "Duplicate", icon: "copy" },
+    { id: "reset", label: "Reset", icon: "reset" },
+    { id: "delete", label: "Delete", icon: "trash" },
   ];
 
   const act = (id: string) => {
     if (id === "add") { setOption(null); openSub(ADD_SUB[kind]); return; }
-    if (!layer) return;
+    if (!layer) { ctx.toast(`Tap a ${KIND_LABEL[kind].toLowerCase()} on the photo first`); return; }
     switch (id) {
       case "edit": openSub("text-edit"); break;
       case "opacity": case "blend": setOption((o) => (o === id ? null : id)); break;
@@ -95,31 +106,30 @@ export function LayerPanel({ kind }: { kind: Kind }) {
     }
   };
 
-  const optH = option && layer ? 52 : 0;
+  const optH = option && layer ? 60 : 0;
   return (
     <>
-      <ControlRow bottom={186 + optH} undo={undo} redo={redo} onOriginal={setOriginal} />
+      <ControlRow bottom={MENU + optH} undo={undo} onOriginal={setOriginal} />
       {option === "opacity" && layer && (
-        <div className="absolute inset-x-0 flex items-center" style={{ bottom: 186, height: 52, background: "rgba(0,0,0,0.4)" }}>
-          <span className="truncate text-white" style={{ marginLeft: 20, maxWidth: 80, fontSize: 13 }}>Opacity</span>
-          <EditSeekBar
-            style={{ marginLeft: 24, marginRight: 52 }} value={layer.opacity} min={0} max={1} def={1}
-            onChange={(v) => setLive(updateLayer(doc, layer.id, (l) => ({ ...l, opacity: v })))}
-            onRelease={(v) => commit(updateLayer(doc, layer.id, (l) => ({ ...l, opacity: v })))}
-          />
+        <div className="absolute inset-x-3 z-20 flex h-[52px] items-center rounded-lg bg-panel/90 shadow-lg ring-1 ring-line backdrop-blur-md" style={{ bottom: MENU + 8 }}>
+          <SliderRow label="Opacity" value={Math.round(layer.opacity * 100)} className="flex-1 px-3">
+            <EditSeekBar
+              value={layer.opacity} min={0} max={1} def={1} level={false}
+              onChange={(v) => setLive(updateLayer(doc, layer.id, (l) => ({ ...l, opacity: v })))}
+              onRelease={(v) => commit(updateLayer(doc, layer.id, (l) => ({ ...l, opacity: v })))}
+            />
+          </SliderRow>
         </div>
       )}
       {option === "blend" && layer && (
-        <div className="no-scrollbar absolute inset-x-0 flex overflow-x-auto" style={{ bottom: 186, height: 52, background: "rgba(0,0,0,0.4)", padding: "0 6px" }}>
-          {BLENDS.map((b) => (
-            <button key={b.id} type="button" onClick={() => commit(updateLayer(doc, layer.id, (l) => ({ ...l, blend: b.id })))} className="h-full flex-none whitespace-nowrap" style={{ margin: "0 14px", fontSize: 13, color: layer.blend === b.id ? "#ffffff" : "rgba(255,255,255,0.6)" }}>
-              {b.label}
-            </button>
-          ))}
+        <div className="absolute inset-x-3 z-20 flex h-[52px] items-center rounded-lg bg-panel/90 shadow-lg ring-1 ring-line backdrop-blur-md" style={{ bottom: MENU + 8 }}>
+          <ChipRow className="px-2">
+            {BLENDS.map((b) => <ToolChip key={b.id} label={b.label} selected={layer.blend === b.id} onClick={() => commit(updateLayer(doc, layer.id, (l) => ({ ...l, blend: b.id })))} />)}
+          </ChipRow>
         </div>
       )}
-      <div className="absolute inset-x-0 bg-black" style={{ bottom: 52, height: 134 }}>
-        <FeatureList count={items.length}>
+      <PanelArea>
+        <FeatureList>
           {items.map((it) => (
             <FeatureButton
               key={it.id} icon={it.icon} label={it.label}
@@ -129,12 +139,12 @@ export function LayerPanel({ kind }: { kind: Kind }) {
             />
           ))}
         </FeatureList>
-      </div>
+      </PanelArea>
     </>
   );
 }
 
-/* ================================================================== gizmo */
+/* ================================================================== on-photo handles */
 
 export function LayerGizmo() {
   const { doc, setLive, commit, rect, frame, selected, select, tab, setTool, sub, openSub } = useEdit();
@@ -186,14 +196,14 @@ export function LayerGizmo() {
   const handle = useRef<{ cx: number; cy: number; v0: { x: number; y: number }; s0: number; r0: number; rotate: boolean } | null>(null);
   if (!layer || editing) return null;
 
-  const cx = rect.x + layer.x * rect.w, cy = rect.y + layer.y * rect.h;
+  const cx0 = rect.x + layer.x * rect.w, cy0 = rect.y + layer.y * rect.h;
   const w = layer.s * rect.w, h = w / layer.aspect;
 
   const startHandle = (e: React.PointerEvent, rotate: boolean) => {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    const root = (e.currentTarget as HTMLElement).offsetParent!.getBoundingClientRect();
-    const ccx = root.left + cx, ccy = root.top + cy;
+    const root = (e.currentTarget as HTMLElement).closest("[data-editor]")!.getBoundingClientRect();
+    const ccx = root.left + cx0, ccy = root.top + cy0;
     handle.current = { cx: ccx, cy: ccy, v0: { x: e.clientX - ccx, y: e.clientY - ccy }, s0: layer.s, r0: layer.rot, rotate };
   };
   const moveHandle = (e: React.PointerEvent) => {
@@ -203,52 +213,61 @@ export function LayerGizmo() {
     const k = Math.hypot(v.x, v.y) / Math.max(1, Math.hypot(hd.v0.x, hd.v0.y));
     const da = Math.atan2(v.y, v.x) - Math.atan2(hd.v0.y, hd.v0.x);
     let r = hd.rotate ? hd.r0 + da : hd.r0;
-    // gizmo.snapped: snap to 0/90/180/270 degrees
+    // snap to 0 / 90 / 180 / 270 degrees
     const snap = Math.round(r / (Math.PI / 2)) * (Math.PI / 2);
     if (hd.rotate && Math.abs(r - snap) < 0.05) r = snap;
     setLive(updateLayer(docRef.current, layer.id, (l) => ({ ...l, s: Math.max(0.03, Math.min(4, hd.s0 * k)), rot: r })));
   };
   const endHandle = () => { if (handle.current) { handle.current = null; commit(docRef.current); } };
+  const hp = { onPointerMove: moveHandle, onPointerUp: endHandle, onPointerCancel: endHandle };
 
-  const corner = (sx: number, sy: number) => ({ left: w / 2 + sx * w / 2 - 8, top: h / 2 + sy * h / 2 - 8 });
   return (
-    <div className="pointer-events-none absolute z-10" style={{ left: cx - w / 2, top: cy - h / 2, width: w, height: h, transform: `rotate(${layer.rot}rad)` }}>
-      <div className="absolute inset-0" style={{ border: "1px solid #0bd4d2" }} />
+    <div className="pointer-events-none absolute z-10" style={{ left: cx0 - w / 2, top: cy0 - h / 2, width: w, height: h, transform: `rotate(${layer.rot}rad)` }}>
+      <div className="absolute inset-0 rounded-[2px] ring-[1.5px] ring-accent" style={{ boxShadow: "0 0 0 1px rgba(0,0,0,0.25)" }} />
       {([[-1, -1], [1, -1], [-1, 1]] as const).map(([sx, sy]) => (
-        <img
-          key={`${sx}${sy}`} src={`${BASE}/edit/gizmo_corner_default.png`} alt="" draggable={false}
-          className="pointer-events-auto absolute" style={{ ...corner(sx, sy), width: 16, height: 16, touchAction: "none" }}
-          onPointerDown={(e) => startHandle(e, false)} onPointerMove={moveHandle} onPointerUp={endHandle} onPointerCancel={endHandle}
-        />
+        <span
+          key={`${sx}${sy}`} aria-label="Resize"
+          className="pointer-events-auto absolute flex h-7 w-7 items-center justify-center"
+          style={{ left: w / 2 + (sx * w) / 2 - 14, top: h / 2 + (sy * h) / 2 - 14, touchAction: "none" }}
+          onPointerDown={(e) => startHandle(e, false)} {...hp}
+        >
+          <span className="h-3.5 w-3.5 rounded-full bg-white shadow ring-2 ring-accent" />
+        </span>
       ))}
-      <img
-        src={`${BASE}/edit/gizmo_btn_rotation.png`} alt="" draggable={false}
-        className="pointer-events-auto absolute" style={{ left: w - 19.5, top: h - 19.5, width: 39, height: 39, touchAction: "none" }}
-        onPointerDown={(e) => startHandle(e, true)} onPointerMove={moveHandle} onPointerUp={endHandle} onPointerCancel={endHandle}
-      />
+      <span
+        aria-label="Rotate and resize"
+        className="pointer-events-auto absolute flex h-9 w-9 items-center justify-center rounded-full bg-accent text-on-accent shadow-lg"
+        style={{ left: w - 18, top: h - 18, touchAction: "none" }}
+        onPointerDown={(e) => startHandle(e, true)} {...hp}
+      >
+        <Icon name="rotate-right" size={18} stroke={2.2} />
+      </span>
       {layer.kind === "text" && sub !== "text-edit" && sub !== "text-add" && (
         <button
           type="button"
           onClick={() => openSub("text-edit")}
-          className="pointer-events-auto absolute flex items-center justify-center"
-          style={{ left: w / 2 - 30, top: h + 10, width: 60, height: 30, backgroundImage: `url(${d("icon_stamp_btn_modify")})`, backgroundSize: "100% 100%", fontSize: 12, color: "#000000" }}
+          className="oe-press pointer-events-auto absolute flex h-8 items-center gap-1 rounded-full bg-fg px-3 text-[12px] font-semibold text-bg shadow-lg"
+          style={{ left: w / 2, top: h + 12, transform: "translateX(-50%)" }}
         >
-          Type
+          <Icon name="pencil" size={13} /> Edit
         </button>
       )}
     </div>
   );
 }
 
-/* ================================================================== layer list popup */
+/* ================================================================== layer list */
 
 function LayerThumb({ l }: { l: Layer }) {
   const url = useMemo(() => {
-    const c = rasterLayer({ ...l, opacity: 1 }, 64);
+    const c = rasterLayer({ ...l, opacity: 1 }, 96);
     return c ? c.toDataURL() : "";
   }, [l]);
-  return url ? <img src={url} alt="" className="object-contain" style={{ width: 32, height: 32 }} /> : null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return url ? <img src={url} alt="" className="h-9 w-9 object-contain" /> : null;
 }
+
+const ROW = 56;
 
 export function LayerListPopup({ onClose }: { onClose: () => void }) {
   const { doc, commit, setTab, select, originalUrl, bases, frame } = useEdit();
@@ -256,7 +275,6 @@ export function LayerListPopup({ onClose }: { onClose: () => void }) {
   const front = [...doc.layers].reverse();
   const drag = useRef<{ id: number; y0: number; idx: number } | null>(null);
   const [dragDy, setDragDy] = useState<{ id: number; dy: number } | null>(null);
-  const rows = Math.min(front.length, 5.5);
 
   const merge = () => {
     const base = bases.current[doc.base];
@@ -264,7 +282,7 @@ export function LayerListPopup({ onClose }: { onClose: () => void }) {
     out.width = base.width; out.height = base.height;
     const g = out.getContext("2d")!;
     g.drawImage(base, 0, 0);
-    // layers are positioned in frame space; map the frame onto the base (ignoring the border padding)
+    // layers are positioned in frame space; map the frame onto the base (ignoring the frame padding)
     const k = base.width / frame.fw;
     g.save(); g.translate(-(frame.fw - base.width / k) / 2 * k, -(frame.fh - base.height / k) / 2 * k);
     for (const l of doc.layers) {
@@ -287,68 +305,75 @@ export function LayerListPopup({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      <img src={d("icon_common_tooltip_arrow")} alt="" className="absolute z-30" style={{ right: 8 + 74 + 4 + 21 - 7, top: 52, width: 14, height: 8 }} />
-      <div className="absolute z-30 overflow-hidden" style={{ right: 10, top: 59, width: 146, borderRadius: 3, background: "rgba(0,0,0,0.6)" }}>
-        <button type="button" onClick={() => setConfirm(true)} className="flex items-center justify-center" style={{ margin: "12px 12px 0", width: 122, height: 32, borderRadius: 15, background: "rgba(255,255,255,0.2)" }}>
-          <Img name="icon_common_mergelayer" size={20} />
-          <span className="text-white" style={{ fontSize: 12, marginLeft: 6 }}>Merge All</span>
-        </button>
-        <div className="no-scrollbar overflow-y-auto" style={{ marginTop: 8, paddingBottom: 10, maxHeight: 56 * rows + 10 }}>
+      <div className="absolute inset-0 z-[45]" onClick={onClose} />
+      <div className="absolute right-2 z-[46] w-[248px] overflow-hidden rounded-lg bg-panel shadow-2xl ring-1 ring-line" style={{ top: TOP_H + 4, animation: "oe-pop 160ms var(--oe-ease)", transformOrigin: "top right" }}>
+        <div className="flex items-center gap-2 px-4 pb-2 pt-3">
+          <span className="flex-1 font-display text-[15px] font-semibold">Layers</span>
+          <Button size="sm" variant="secondary" icon="merge" onClick={() => setConfirm(true)}>Merge all</Button>
+        </div>
+        <div className="no-scrollbar overflow-y-auto pb-2" style={{ maxHeight: ROW * 5.5 }}>
           {front.map((l, i) => (
             <div
               key={l.id}
-              className="relative flex items-center"
-              style={{ height: 56, transform: dragDy?.id === l.id ? `translateY(${dragDy.dy}px)` : undefined, zIndex: dragDy?.id === l.id ? 1 : 0 }}
+              className="relative flex cursor-pointer items-center gap-3 bg-panel px-3 active:bg-raised"
+              style={{ height: ROW, transform: dragDy?.id === l.id ? `translateY(${dragDy.dy}px)` : undefined, zIndex: dragDy?.id === l.id ? 1 : 0 }}
               onClick={() => { select(l.id); setTab(TAB_OF[l.kind]); select(l.id); onClose(); }}
             >
-              <div className="relative flex flex-none items-center justify-center" style={{ width: 48, height: 48, marginLeft: 12, borderRadius: 2, background: "rgba(255,255,255,0.25)", opacity: l.hidden ? 0.4 : 1 }}>
-                <LayerThumb l={l} />
-              </div>
-              <button type="button" className="absolute" style={{ left: 6, top: 2, width: 14, height: 14 }} onClick={(e) => { e.stopPropagation(); commit({ ...doc, layers: doc.layers.filter((x) => x.id !== l.id) }); }}>
-                <Img name="icon_common_layer_delete" size={14} />
+              <span className={cx("flex h-11 w-11 flex-none items-center justify-center rounded-sm bg-raised", l.hidden && "opacity-40")}><LayerThumb l={l} /></span>
+              <span className={cx("min-w-0 flex-1 truncate text-[13px]", l.hidden ? "text-fg-3" : "text-fg")}>
+                {l.kind === "text" ? l.style.text.split("\n")[0] || "Text" : KIND_LABEL[l.kind]}
+              </span>
+              <button type="button" aria-label={l.hidden ? "Show" : "Hide"} className="flex h-8 w-8 items-center justify-center text-fg-2" onClick={(e) => { e.stopPropagation(); commit(updateLayer(doc, l.id, (x) => ({ ...x, hidden: !x.hidden }))); }}>
+                <Icon name={l.hidden ? "eye-off" : "eye"} size={18} />
               </button>
-              <span className="flex-1" />
-              <button type="button" className="flex items-center justify-center" style={{ width: 36, paddingRight: 12, boxSizing: "content-box", height: 56 }} onClick={(e) => { e.stopPropagation(); commit(updateLayer(doc, l.id, (x) => ({ ...x, hidden: !x.hidden }))); }}>
-                <Img name={l.hidden ? "icon_edit_layer_hide" : "icon_edit_layer_show"} size={24} />
+              <button type="button" aria-label="Delete layer" className="flex h-8 w-8 items-center justify-center text-fg-2" onClick={(e) => { e.stopPropagation(); commit({ ...doc, layers: doc.layers.filter((x) => x.id !== l.id) }); }}>
+                <Icon name="trash" size={17} />
               </button>
               <div
-                className="flex h-full items-center justify-center"
-                style={{ width: 35, paddingRight: 11, touchAction: "none" }}
+                aria-label="Drag to reorder"
+                className="flex h-full w-6 items-center justify-center text-fg-3"
+                style={{ touchAction: "none" }}
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); drag.current = { id: l.id, y0: e.clientY, idx: i }; setDragDy({ id: l.id, dy: 0 }); }}
                 onPointerMove={(e) => { if (drag.current) setDragDy({ id: l.id, dy: e.clientY - drag.current.y0 }); }}
                 onPointerUp={(e) => {
                   const dg = drag.current; drag.current = null; setDragDy(null);
                   if (!dg) return;
-                  const to = Math.max(0, Math.min(front.length - 1, dg.idx + Math.round((e.clientY - dg.y0) / 56)));
+                  const to = Math.max(0, Math.min(front.length - 1, dg.idx + Math.round((e.clientY - dg.y0) / ROW)));
                   if (to === dg.idx) return;
                   const f = [...front]; const [m] = f.splice(dg.idx, 1); f.splice(to, 0, m);
                   commit({ ...doc, layers: f.reverse() });
                 }}
               >
-                <Img name="icon_edit_layer_holder" size={24} />
+                <Icon name="grip" size={18} />
               </div>
             </div>
           ))}
-          {/* layer_original_item_layout */}
-          <div className="flex items-center" style={{ height: 56 }}>
-            <div className="flex-none overflow-hidden" style={{ width: 48, height: 48, marginLeft: 12, borderRadius: 2, background: "rgba(255,255,255,0.25)" }}>
+          <div className="flex items-center gap-3 border-t border-line px-3" style={{ height: ROW }}>
+            <span className="h-11 w-11 flex-none overflow-hidden rounded-sm bg-raised">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               {originalUrl && <img src={originalUrl} alt="" className="h-full w-full object-cover" />}
-            </div>
-            <span className="flex-1 text-center text-white" style={{ fontSize: 12 }}>Background</span>
+            </span>
+            <span className="flex-1 text-[13px] text-fg-3">Photo</span>
+            <Icon name="lock" size={16} className="mr-1 text-fg-3" />
           </div>
         </div>
       </div>
-      <div className="absolute inset-0 z-20" onClick={onClose} />
-      {confirm && <AlertDialog message="Merge All cannot be undone." cancel="Cancel" ok="OK" onCancel={() => setConfirm(false)} onOk={() => { setConfirm(false); merge(); }} />}
+      {confirm && (
+        <AlertDialog
+          icon="merge" title="Merge all layers?"
+          message="Stickers, text and drawings become part of the photo. This can be undone, but the layers can't be edited separately again."
+          ok="Merge" onCancel={() => setConfirm(false)} onOk={() => { setConfirm(false); merge(); }}
+        />
+      )}
     </>
   );
 }
 
-/* ================================================================== Stickers: Add page */
+/* ================================================================== Stickers: picker */
 
-const MY_KEY = "b612:edit:myStamps";
-const RECENT_KEY = "b612:edit:recentStamps";
+const MY_KEY = "oe:edit:myStickers";
+const RECENT_KEY = "oe:edit:recentStickers";
 const readList = (k: string): string[] => { try { return JSON.parse(localStorage.getItem(k) ?? "[]") as string[]; } catch { return []; } };
 const writeList = (k: string, v: string[]) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* quota */ } };
 
@@ -362,18 +387,20 @@ async function fileToStamp(file: File): Promise<string> {
   return c.toDataURL("image/png");
 }
 
+const STAMP_SHEET_H = 340;
+
 export function StampAddPage() {
   const { doc, commit, openSub, select, nextId, toast, rect } = useEdit();
   useAddPageExit("stamp");
-  const [cat, setCat] = useState<"recent" | "my" | "manage">("recent");
+  const [packs, setPacks] = useState<string[]>(addedPacks);
+  const [cat, setCat] = useState<string>(() => (readList(RECENT_KEY).length ? "recent" : addedPacks()[0] ?? "mine"));
   const [recent, setRecent] = useState<string[]>(() => readList(RECENT_KEY));
   const [mine, setMine] = useState<string[]>(() => readList(MY_KEY));
+  const [manage, setManage] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [shop, setShop] = useState(false);
   const [balloon, setBalloon] = useState(stampShopTooltipPending);
   const shopBtn = useRef<HTMLButtonElement>(null);
-  const layerRoot = useRef<HTMLDivElement>(null);
-  // btn_stamp_shop -> StampShopActivity (requestCode 10026); the first visit retires the balloon
   const openShop = () => { markStampShopTooltipShown(); setBalloon(false); setShop(true); };
 
   const add = (src: string) => {
@@ -381,7 +408,7 @@ export function StampAddPage() {
     img.onload = () => {
       const aspect = img.naturalWidth / img.naturalHeight || 1;
       const id = nextId();
-      // ~ a third of the shorter displayed side, centred
+      // about 40% of the shorter displayed side, centred
       const s = Math.min(0.4, (Math.min(rect.w, rect.h) * 0.4) / rect.w);
       commit({ ...doc, layers: [...doc.layers, { id, kind: "stamp", src, aspect, x: 0.5, y: 0.5, s, rot: 0, flip: false, opacity: 1, blend: "normal", hidden: false, adjust: ZERO_LAYER_ADJUST, erase: [] }] });
       select(id);
@@ -390,33 +417,31 @@ export function StampAddPage() {
     };
     img.src = src;
   };
+  const remove = (src: string) => {
+    const m = mine.filter((x) => x !== src); setMine(m); writeList(MY_KEY, m);
+    const r = recent.filter((x) => x !== src); setRecent(r); writeList(RECENT_KEY, r);
+  };
 
-  const grid = (list: string[], manage = false) => (
-    <div className="grid" style={{ gridTemplateColumns: "repeat(5, 1fr)", padding: "4.5px 0" }}>
-      {list.map((src) => (
+  const grid = (list: string[], removable = false) => (
+    <div className="grid grid-cols-5 gap-2 px-4 pb-4">
+      {list.map((src, i) => (
         <button
-          key={src.slice(-64)} type="button"
-          onClick={() => {
-            if (!manage) return add(src);
-            const m = mine.filter((x) => x !== src); setMine(m); writeList(MY_KEY, m);
-            const r = recent.filter((x) => x !== src); setRecent(r); writeList(RECENT_KEY, r);
-          }}
-          className="relative mx-auto flex items-center justify-center" style={{ width: 63, height: 63, marginBottom: 10 }}
+          key={`${i}:${src.length}:${src.slice(-24)}`} type="button" onClick={() => (removable && manage ? remove(src) : add(src))}
+          className="oe-press relative flex aspect-square items-center justify-center rounded-md bg-raised p-1.5"
         >
-          <span className="absolute" style={{ width: 54, height: 54, borderRadius: 5, background: "rgba(255,255,255,0.06)" }} />
-          <img src={src} alt="" className="relative object-contain" style={{ width: 54, height: 54 }} />
-          {manage && <Img name="edit_stamp_delete" size={20} style={{ position: "absolute", top: 0, right: 0 }} />}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt="" className="h-full w-full object-contain" draggable={false} />
+          {removable && manage && <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-white shadow"><Icon name="close" size={12} stroke={2.6} /></span>}
         </button>
       ))}
     </div>
   );
-
-  const catBtn = (id: typeof cat, icon: string, size = 31, tint = false) => (
-    <button key={id} type="button" onClick={() => setCat(id)} className="relative flex flex-none items-center justify-center" style={{ width: 56, height: 43 }}>
-      {tint ? <Tint name={icon} size={size} color="#ffffff" /> : <Img name={icon} size={size} />}
-      {cat === id && <span className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 1, width: 24, height: 2, borderRadius: 1, background: "#0bd4d2" }} />}
-    </button>
-  );
+  const tabs = [
+    { id: "recent", label: "Recent" },
+    ...STAMP_PACKS.filter((p) => packs.includes(p.id)).map((p) => ({ id: p.id, label: p.name })),
+    { id: "mine", label: "My stickers" },
+  ];
+  const pack = STAMP_PACKS.find((p) => p.id === cat);
 
   return (
     <>
@@ -429,49 +454,44 @@ export function StampAddPage() {
           try {
             const src = await fileToStamp(f);
             const m = [src, ...mine].slice(0, 30); setMine(m); writeList(MY_KEY, m);
-          } catch { toast("This feature is not supported on your device."); }
+          } catch { toast("That picture couldn't be opened."); }
         }}
       />
-      <div className="absolute inset-x-0 bottom-0" style={{ height: 302, background: "rgba(17,17,17,0.9)" }}>
-        <div className="absolute inset-x-0 top-0 flex items-center" style={{ height: 42 }}>
-          <button ref={shopBtn} type="button" onClick={openShop} className="flex-none" style={{ marginLeft: 7 }} aria-label="Sticker shop">
-            <Img name="edit_stamp_search" size={35} />
+      <EditBar title="Stickers" onConfirm={() => openSub(null)} applyLabel="Done" />
+      <Dock height={STAMP_SHEET_H} className="flex flex-col">
+        <div className="flex flex-none items-center gap-2 pl-3 pt-3">
+          <button ref={shopBtn} type="button" onClick={openShop} aria-label="Sticker library" className="oe-press flex h-9 flex-none items-center gap-1.5 rounded-full bg-accent-soft px-3 text-[13px] font-semibold text-accent">
+            <Icon name="library" size={16} /> Library
           </button>
-          <div className="no-scrollbar flex overflow-x-auto" style={{ marginLeft: 10 }}>
-            {catBtn("recent", "edit_stamp_recent")}
-            {catBtn("my", "edit_stamp_my")}
-            {catBtn("manage", "edit_stamp_setting", 35, true)}
-          </div>
+          <ChipRow className="pl-1 pr-3">
+            {tabs.map((t) => <ToolChip key={t.id} label={t.label} selected={cat === t.id} onClick={() => { setCat(t.id); setManage(false); }} />)}
+          </ChipRow>
         </div>
-        <div className="absolute inset-x-0" style={{ top: 42, height: 1, background: "#303030" }} />
-        <div className="no-scrollbar absolute inset-x-0 overflow-y-auto" style={{ top: 43, bottom: 52 }}>
+        <div className="no-scrollbar mt-3 min-h-0 flex-1 overflow-y-auto">
           {cat === "recent" && (recent.length ? grid(recent) : (
-            <p className="absolute inset-0 flex items-center justify-center whitespace-pre-line text-center text-white" style={{ fontSize: 13 }}>{"Add Stickers to\ndecorate your photo!"}</p>
+            <p className="flex h-full items-center justify-center px-10 text-center text-[13px] leading-snug text-fg-3">Stickers you use show up here. Pick a pack above to start.</p>
           ))}
-          {cat === "my" && (
+          {pack && grid(pack.stamps)}
+          {cat === "mine" && (
             <>
-              <div className="flex justify-center" style={{ paddingTop: 14 }}>
-                <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center text-white" style={{ height: 40, paddingLeft: 15, paddingRight: 20, borderRadius: 20, border: "1px solid rgba(255,255,255,0.2)", fontSize: 14 }}>
-                  <Img name="edit_stamp_add" size={24} style={{ marginRight: 4 }} />
-                  Create stickers
-                </button>
+              <div className="flex gap-2 px-4 pb-3">
+                <Button size="sm" variant="secondary" icon="image-plus" className="min-w-0 flex-1" onClick={() => fileRef.current?.click()}>From a picture</Button>
+                {mine.length > 0 && <Button size="sm" variant={manage ? "primary" : "ghost"} icon={manage ? "check" : "trash"} onClick={() => setManage((v) => !v)}>{manage ? "Done" : "Remove"}</Button>}
               </div>
-              {grid(mine)}
+              {mine.length ? grid(mine, true) : <p className="px-10 pt-4 text-center text-[13px] leading-snug text-fg-3">Turn any picture into a sticker. Transparent PNGs work best.</p>}
             </>
           )}
-          {cat === "manage" && grid(mine, true)}
         </div>
-        <TitleBar title="Stickers" onConfirm={() => openSub(null)} />
-      </div>
-      <div ref={layerRoot} className="pointer-events-none absolute inset-0 z-30">
+      </Dock>
+      <div className="pointer-events-none absolute inset-0 z-30">
         {balloon && !shop && <div className="pointer-events-auto"><StampShopBalloon anchor={shopBtn} onClick={openShop} /></div>}
       </div>
-      {shop && <StampShop onClose={() => setShop(false)} />}
+      {shop && <StampShop onClose={() => setShop(false)} onChange={(ids) => { setPacks(ids); if (!ids.includes(cat) && STAMP_PACKS.some((p) => p.id === cat)) setCat(ids[0] ?? "recent"); }} />}
     </>
   );
 }
 
-/* ================================================================== Text: input + Add/Edit page */
+/* ================================================================== Text: typing overlay + text page */
 
 function TextInput({ initial, onCancel, onDone }: { initial: string; onCancel: () => void; onDone: (t: string) => void }) {
   const { toast } = useEdit();
@@ -479,16 +499,16 @@ function TextInput({ initial, onCancel, onDone }: { initial: string; onCancel: (
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { ref.current?.focus(); }, []);
   return (
-    <div className="absolute inset-0 z-50" style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
-      <div className="absolute inset-x-0 top-0 flex items-center justify-between" style={{ height: 52 }}>
-        <button type="button" onClick={onCancel} className="text-white" style={{ marginLeft: 19, fontSize: 17, height: 52 }}>Cancel</button>
-        <button type="button" onClick={() => (text.trim() ? onDone(text) : toast("Please enter text."))} style={{ marginRight: 19, fontSize: 17, height: 52, color: "#0bd4d2" }}>Done</button>
+    <div className="absolute inset-0 z-50 bg-bg/70 backdrop-blur-xl" style={{ animation: "oe-fade-in 160ms" }}>
+      <div className="absolute inset-x-0 top-0 flex items-center justify-between px-3" style={{ height: TOP_H }}>
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" className="rounded-full px-4" onClick={() => (text.trim() ? onDone(text) : toast("Type something first"))}>Done</Button>
       </div>
-      <div className="absolute inset-x-0 flex items-center justify-center" style={{ top: 52, bottom: 192 }}>
+      <div className="absolute inset-x-0 flex items-center justify-center px-6" style={{ top: TOP_H, bottom: 240 }}>
         <textarea
-          ref={ref} value={text} onChange={(e) => setText(e.target.value)} placeholder="Please enter text." rows={Math.min(6, text.split("\n").length)}
-          className="resize-none bg-transparent text-center text-white outline-none placeholder:text-[rgba(255,255,255,0.3)]"
-          style={{ width: 350, maxWidth: "100%", fontSize: 25, minHeight: 45, paddingTop: 8.5, paddingBottom: 3, caretColor: "#ffffff" }}
+          ref={ref} value={text} onChange={(e) => setText(e.target.value)} placeholder="Type your text" rows={Math.min(6, text.split("\n").length)}
+          className="w-full resize-none bg-transparent text-center font-display text-[28px] font-semibold leading-tight text-fg outline-none placeholder:text-fg-3 focus-visible:outline-none"
+          style={{ caretColor: "var(--oe-accent)" }}
         />
       </div>
     </div>
@@ -497,54 +517,32 @@ function TextInput({ initial, onCancel, onDone }: { initial: string; onCancel: (
 
 type StyleCat = "text" | "stroke" | "shadow" | "bg" | "align" | "spacing";
 const STYLE_CATS: { id: StyleCat; label: string }[] = [
-  { id: "text", label: "Text" }, { id: "stroke", label: "Stroke" }, { id: "shadow", label: "Shadow" },
-  { id: "bg", label: "Background" }, { id: "align", label: "Align" }, { id: "spacing", label: "Spacing" },
+  { id: "text", label: "Colour" }, { id: "stroke", label: "Outline" }, { id: "shadow", label: "Shadow" },
+  { id: "bg", label: "Label" }, { id: "align", label: "Align" }, { id: "spacing", label: "Spacing" },
 ];
+const TEXT_SHEET_H = 270;
 
+/** Colour row with a "none" option (outline, shadow, label). */
 function ColorCells({ colors, value, none, onPick }: { colors: string[]; value: string | null; none: boolean; onPick: (c: string | null) => void }) {
-  const list: (string | null)[] = none ? [null, ...colors] : colors;
   return (
-    <div className="no-scrollbar flex overflow-x-auto" style={{ height: 37, marginLeft: 5.5, padding: "0 4px", alignItems: "center" }}>
-      {list.map((c, i) => {
-        const sel = c === value;
-        return (
-          <button
-            key={c ?? "none"} type="button" onClick={() => onPick(c)} className="relative flex-none"
-            style={{
-              width: 34, height: 34, background: c ?? "#222222",
-              borderTopLeftRadius: i === 0 ? 2 : 0, borderBottomLeftRadius: i === 0 ? 2 : 0,
-              borderTopRightRadius: i === list.length - 1 ? 2 : 0, borderBottomRightRadius: i === list.length - 1 ? 2 : 0,
-              boxShadow: c === "#000000" ? "inset 0 1px 0 #2F2F2F, inset 0 -1px 0 #2F2F2F" : undefined,
-            }}
-          >
-            {c === null && <span className="absolute left-1/2 top-1/2" style={{ width: 17, height: 1.5, background: "#ffffff", transform: "translate(-50%,-50%) rotate(-45deg)" }} />}
-            {sel && <span className="absolute" style={{ inset: -2, border: "2px solid #ffffff", borderRadius: 3, zIndex: 1 }} />}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function StyleRow({ title, value, def, disabled, onChange, onRelease }: { title: string; value: number; def: number; disabled?: boolean; onChange: (v: number) => void; onRelease?: (v: number) => void }) {
-  return (
-    <div className="relative flex items-center" style={{ height: 52 }}>
-      <span className="absolute text-center text-white" style={{ left: 0, width: "25%", fontSize: 13 }}>{title}</span>
-      <div className="absolute flex" style={{ left: "25%", width: "58%" }}>
-        <EditSeekBar value={value} min={0} max={1} def={def} level={false} disabled={disabled} onChange={onChange} onRelease={onRelease} />
-      </div>
-      <span className="absolute text-center text-white" style={{ left: "83%", width: "10%", fontSize: 12, opacity: disabled ? 0.3 : 1 }}>{Math.round(value * 100)}</span>
-    </div>
+    <>
+      {none && (
+        <button type="button" aria-label="None" aria-pressed={value === null} onClick={() => onPick(null)}
+          className={cx("oe-press flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full", value === null ? "bg-fg text-bg" : "bg-raised text-fg-2")}>
+          <Icon name="block" size={16} />
+        </button>
+      )}
+      {colors.map((c) => <ColorChip key={c} color={c} selected={c === value} onClick={() => onPick(c)} />)}
+    </>
   );
 }
 
 export function TextAddPage({ mode }: { mode: "add" | "edit" }) {
-  const { doc, setLive, commit, openSub, select, nextId, rect, selected, setTool, photoCanvas, toast } = useEdit();
+  const { doc, setLive, commit, openSub, select, nextId, rect, selected, setTool, photoCanvas } = useEdit();
   useAddPageExit("text");
   const existing = doc.layers.find((l) => l.id === selected && l.kind === "text") as Extract<Layer, { kind: "text" }> | undefined;
   const [input, setInput] = useState(mode === "add" || !existing);
   const [layerId, setLayerId] = useState<number | null>(mode === "edit" && existing ? existing.id : null);
-  const [page, setPage] = useState<"edit" | "style">("edit");
   const [cat, setCat] = useState<StyleCat>("text");
   const [picking, setPicking] = useState(false);
   const [entry] = useState(doc);
@@ -563,7 +561,7 @@ export function TextAddPage({ mode }: { mode: "add" | "edit" }) {
     setLive(updateLayer(doc, layer.id, (l) => ({ ...l, style, aspect, s })));
   };
 
-  // tap the text on the preview to retype; eyedropper samples the photo
+  // tap the text on the photo to retype it; the eyedropper samples the photo
   useEffect(() => {
     if (input) return;
     setTool({
@@ -571,11 +569,7 @@ export function TextAddPage({ mode }: { mode: "add" | "edit" }) {
         if (picking) {
           const src = photoCanvas();
           if (!src) return;
-          const c = document.createElement("canvas"); c.width = 1; c.height = 1;
-          const g = c.getContext("2d")!;
-          g.drawImage(src, Math.max(0, Math.min(src.width - 1, x * src.width)), Math.max(0, Math.min(src.height - 1, y * src.height)), 1, 1, 0, 0, 1, 1);
-          const p = g.getImageData(0, 0, 1, 1).data;
-          const hex = `#${[p[0], p[1], p[2]].map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+          const hex = sampleHex(src, x, y);
           const key = cat === "text" ? "color" : cat === "stroke" ? "stroke" : cat === "shadow" ? "shadow" : "bg";
           const l = docRef.current.layers.find((q) => q.id === layerId);
           if (l && l.kind === "text") {
@@ -618,81 +612,51 @@ export function TextAddPage({ mode }: { mode: "add" | "edit" }) {
 
   return (
     <>
-      <div className="absolute inset-x-0 bottom-0" style={{ height: 192 + 52 }}>
-        <div className="absolute inset-x-0 top-0" style={{ height: 192, background: "rgba(17,17,17,0.9)" }}>
-          {page === "edit" ? (
+      <EditBar title="Text" onClose={() => { setLive(null); openSub(null); }} onConfirm={confirm} />
+      <Dock height={TEXT_SHEET_H} className="flex flex-col gap-3 pt-4">
+        <div className="no-scrollbar flex flex-none gap-2 overflow-x-auto px-4">
+          {FONTS.map((f) => (
+            <button
+              key={f.id} type="button" onClick={() => setStyle({ font: f.id })} aria-pressed={st.font === f.id}
+              className={cx("oe-press flex h-11 min-w-[84px] flex-none items-center justify-center whitespace-nowrap rounded-md px-3 text-[15px] transition-colors", st.font === f.id ? "bg-fg text-bg" : "bg-raised text-fg")}
+              style={{ fontFamily: f.css }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <ChipRow className="flex-none">
+          {STYLE_CATS.map((c) => <ToolChip key={c.id} label={c.label} selected={cat === c.id} onClick={() => setCat(c.id)} />)}
+        </ChipRow>
+        <div className="flex min-h-0 flex-1 flex-col justify-center gap-2 pb-3">
+          {(cat === "text" || cat === "stroke" || cat === "shadow" || cat === "bg") && (
             <>
-              {/* font_recycler_view */}
-              <div className="no-scrollbar flex overflow-x-auto" style={{ height: 50, paddingTop: 10, paddingLeft: 14.5, paddingRight: 14.5, gap: 10 }}>
-                {FONTS.map((f) => (
-                  <button key={f.id} type="button" onClick={() => setStyle({ font: f.id })} className="relative flex flex-none items-center justify-center whitespace-nowrap text-white" style={{ width: 76, height: 40, borderRadius: 7, background: "#3C3C3C", fontFamily: f.css, fontSize: 14 }}>
-                    {f.label}
-                    {st.font === f.id && <span className="absolute inset-0" style={{ borderRadius: 7, border: "2px solid #0bd4d2" }} />}
-                  </button>
-                ))}
+              <div className="no-scrollbar flex items-center gap-3 overflow-x-auto px-4 py-1">
+                <SwatchTool icon="pipette" label="Pick from the photo" active={picking} onClick={() => setPicking((v) => !v)} />
+                <ColorCells colors={TEXT_COLORS} none={cat !== "text"} value={st[colorKey] as string | null} onPick={(c) => setStyle({ [colorKey]: c } as Partial<TextStyle>)} />
               </div>
-              {/* category tabs */}
-              <div className="no-scrollbar flex items-start overflow-x-auto" style={{ height: 52, paddingTop: 11, paddingLeft: 21.5, paddingRight: 27.5, gap: 10 }}>
-                {STYLE_CATS.map((c) => (
-                  <button key={c.id} type="button" onClick={() => setCat(c.id)} className="flex-none" style={{ height: 32, padding: "0 12px", fontSize: 13, borderRadius: 50, background: cat === c.id ? "#ffffff" : "transparent", color: cat === c.id ? "#000000" : "#ffffff" }}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-              {/* view_pager_font_style (88dp) */}
-              <div style={{ height: 88 }}>
-                {(cat === "text" || cat === "stroke" || cat === "shadow" || cat === "bg") && (
-                  <>
-                    <div className="flex items-center" style={{ paddingTop: 5 }}>
-                      <button type="button" onClick={() => setPicking((v) => !v)} className="flex-none" style={{ width: 34, height: 34.5, marginLeft: 12, marginRight: 4.5, opacity: picking ? 0.5 : 1 }}>
-                        <Img name="icon_text_picker" size={34} />
-                      </button>
-                      <ColorCells
-                        colors={TEXT_COLORS} none={cat !== "text"} value={st[colorKey] as string | null}
-                        onPick={(c) => setStyle({ [colorKey]: c } as Partial<TextStyle>)}
-                      />
-                    </div>
-                    <div style={{ marginTop: 3.5 }}>
-                      <StyleRow
-                        title={cat === "stroke" ? "Thickness" : "Opacity"} value={st[valueKey] as number} def={defV}
-                        disabled={st[colorKey] === null}
-                        onChange={(v) => setStyle({ [valueKey]: v } as Partial<TextStyle>)}
-                      />
-                    </div>
-                  </>
-                )}
-                {cat === "align" && (
-                  <div className="flex items-center justify-center" style={{ height: 71.5, paddingBottom: 7 }}>
-                    {(["left", "center", "right"] as const).map((a) => (
-                      <button key={a} type="button" onClick={() => setStyle({ align: a })} className="flex items-center justify-center" style={{ width: 58.5, height: 58.5, margin: "0 10px", borderRadius: 6, background: "#222222", boxShadow: st.align === a ? "inset 0 0 0 2px #0bd4d2" : undefined }}>
-                        <Img name={`icon_text_align_${a}`} size={46} />
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {cat === "spacing" && (
-                  <div style={{ height: 88 }}>
-                    <div style={{ height: 44 }} className="relative"><div className="absolute inset-x-0" style={{ top: -4 }}><StyleRow title="Character" value={st.letter} def={0} onChange={(v) => setStyle({ letter: v })} /></div></div>
-                    <div style={{ height: 44 }} className="relative"><div className="absolute inset-x-0" style={{ top: -4 }}><StyleRow title="Line" value={st.line} def={0} onChange={(v) => setStyle({ line: v })} /></div></div>
-                  </div>
-                )}
-              </div>
+              <SliderRow label={cat === "stroke" ? "Thickness" : "Opacity"} value={st[colorKey] === null ? "–" : Math.round((st[valueKey] as number) * 100)}>
+                <EditSeekBar value={st[valueKey] as number} min={0} max={1} def={defV} level={false} disabled={st[colorKey] === null} onChange={(v) => setStyle({ [valueKey]: v } as Partial<TextStyle>)} />
+              </SliderRow>
             </>
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <Img name="gallery_edit_frame_error" size={40} />
-              <button type="button" onClick={() => toast("Not connected to network.")} className="text-white" style={{ marginTop: 10, height: 31, padding: "0 14px", borderRadius: 16, fontSize: 13, background: "rgba(255,255,255,0.15)" }}>Retry</button>
+          )}
+          {cat === "align" && (
+            <div className="flex justify-center px-4">
+              <Tabs
+                look="segment" className="w-[260px]"
+                items={[{ id: "left", label: <Icon name="align-left" size={18} label="Left" /> }, { id: "center", label: <Icon name="align-center" size={18} label="Centre" /> }, { id: "right", label: <Icon name="align-right" size={18} label="Right" /> }]}
+                value={st.align} onChange={(a) => setStyle({ align: a })}
+              />
             </div>
           )}
+          {cat === "spacing" && (
+            <>
+              <SliderRow label="Letters" value={Math.round(st.letter * 100)}><EditSeekBar value={st.letter} min={0} max={1} def={0} level={false} onChange={(v) => setStyle({ letter: v })} /></SliderRow>
+              <SliderRow label="Lines" value={Math.round(st.line * 100)}><EditSeekBar value={st.line} min={0} max={1} def={0} level={false} onChange={(v) => setStyle({ line: v })} /></SliderRow>
+            </>
+          )}
         </div>
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black" style={{ height: 52 }}>
-          <button type="button" onClick={() => setPage("edit")} style={{ fontSize: 15, marginRight: 60, color: page === "edit" ? "#ffffff" : "rgba(255,255,255,0.49)" }}>Edit</button>
-          <button type="button" onClick={() => setPage("style")} style={{ fontSize: 15, marginLeft: 60, color: page === "style" ? "#ffffff" : "rgba(255,255,255,0.49)" }}>Style</button>
-          <button type="button" aria-label="Confirm" onClick={confirm} className="absolute right-0 top-0" style={{ width: 52, height: 52 }}>
-            <Tint name="icon_edit_title_confirm" size={52} color="#0bd4d2" />
-          </button>
-        </div>
-      </div>
+      </Dock>
       {input && (
         <TextInput
           initial={layer?.style.text ?? ""}
@@ -704,39 +668,31 @@ export function TextAddPage({ mode }: { mode: "add" | "edit" }) {
   );
 }
 
-/* ================================================================== Brush: Add page */
+/* ================================================================== Draw: new drawing page */
 
-/**
- * DownloadedBrush fields used by the add page (type, colorPickerUse, defaultStrength, resourceName ->
- * BrushConfig.brushPath, outlineResourceName -> outlinePath, stampInterval, supportRotation -> useDirection).
- */
+/** Brush catalogue: the pack's brush tips with spacing, size range and how strokes combine. */
 interface LocalBrush {
   id: string; name: string; type: "COLOR" | "HIGHLIGHTER" | "OUTLINE" | "STAMP"; min: number; max: number;
   colorPickerUse: boolean; defaultStrength: number; tex: string; outline?: string; interval: number; rot: boolean; inner?: string;
 }
-/**
- * The brush list itself is server content (/v1/brush/overview); offline the catalogue is built from the brush masks
- * bundled in the APK (assets/kuru/masks): mask_brush (BrushConfig's default brushPath / outlinePath), marker_brush,
- * blurred_marker_brush, touch_brush, blur_brush and cutout_dash_brush. Ranges are KuruRenderChainWrapper.BrushType.
- */
 const COLOR_RANGE = { min: 0.0015, max: 0.15 };
 const BRUSHES: LocalBrush[] = [
   { id: "pen", name: "Pen", type: "COLOR", ...COLOR_RANGE, colorPickerUse: true, defaultStrength: 20, tex: "round", interval: 0.05, rot: false },
   { id: "marker", name: "Marker", type: "COLOR", ...COLOR_RANGE, colorPickerUse: true, defaultStrength: 30, tex: "marker", interval: 0.04, rot: true },
-  { id: "softmarker", name: "Soft marker", type: "COLOR", ...COLOR_RANGE, colorPickerUse: true, defaultStrength: 30, tex: "marker-soft", interval: 0.04, rot: true },
-  { id: "highlighter", name: "Highlighter", type: "HIGHLIGHTER", ...COLOR_RANGE, colorPickerUse: true, defaultStrength: 40, tex: "marker", interval: 0.04, rot: true },
-  { id: "airbrush", name: "Airbrush", type: "COLOR", ...COLOR_RANGE, colorPickerUse: true, defaultStrength: 40, tex: "spray", interval: 0.06, rot: false },
+  { id: "softmarker", name: "Felt tip", type: "COLOR", ...COLOR_RANGE, colorPickerUse: true, defaultStrength: 30, tex: "marker-soft", interval: 0.04, rot: true },
+  { id: "highlighter", name: "Highlight", type: "HIGHLIGHTER", ...COLOR_RANGE, colorPickerUse: true, defaultStrength: 40, tex: "marker", interval: 0.04, rot: true },
+  { id: "airbrush", name: "Spray", type: "COLOR", ...COLOR_RANGE, colorPickerUse: true, defaultStrength: 40, tex: "spray", interval: 0.06, rot: false },
   { id: "soft", name: "Soft", type: "COLOR", ...COLOR_RANGE, colorPickerUse: true, defaultStrength: 30, tex: "soft", interval: 0.06, rot: false },
   { id: "neon", name: "Neon", type: "OUTLINE", min: 0.01635, max: 0.3, colorPickerUse: true, defaultStrength: 20, tex: "round", outline: "neon", inner: "#FFFFFF", interval: 0.05, rot: false },
-  { id: "dash", name: "Dash", type: "STAMP", min: 0.0025, max: 0.5, colorPickerUse: true, defaultStrength: 12, tex: "dashed", interval: 0.55, rot: true },
+  { id: "dash", name: "Dashes", type: "STAMP", min: 0.0025, max: 0.5, colorPickerUse: true, defaultStrength: 12, tex: "dashed", interval: 0.55, rot: true },
 ];
-const THUMB_COLOR: Partial<Record<LocalBrush["type"], string>> = { HIGHLIGHTER: "#FFC300", OUTLINE: "#32C5FF" };
+const THUMB_COLOR: Partial<Record<LocalBrush["type"], string>> = { HIGHLIGHTER: "#FFC83D", OUTLINE: "#4CC9F0" };
 const strokeOf = (b: LocalBrush, pts: number[], size: number, color: string): Stroke => ({
   pts, size, color, kind: b.type === "HIGHLIGHTER" ? "highlighter" : b.type === "OUTLINE" ? "outline" : "pen",
   tex: b.tex, outline: b.outline, inner: b.inner, interval: b.interval, rot: b.rot,
 });
 
-/** Brush thumbnails (server images offline): a sample stroke drawn with the brush itself. */
+/** Brush previews: a sample squiggle drawn with each brush. */
 function useBrushThumbs() {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -745,13 +701,13 @@ function useBrushThumbs() {
       if (!alive) return;
       const out: Record<string, string> = {};
       const pts: number[] = [];
-      for (let i = 0; i <= 40; i++) { const t = i / 40; pts.push(0.18 + 0.64 * t, 0.55 - 0.22 * Math.sin(t * Math.PI * 1.6)); }
+      for (let i = 0; i <= 40; i++) { const t = i / 40; pts.push(0.16 + 0.68 * t, 0.55 - 0.22 * Math.sin(t * Math.PI * 1.6)); }
       for (const b of BRUSHES) {
-        const c = document.createElement("canvas"); c.width = c.height = 138;
+        const c = document.createElement("canvas"); c.width = c.height = 128;
         const g = c.getContext("2d")!;
-        g.fillStyle = "#1c1c1c"; g.fillRect(0, 0, 138, 138);
+        g.fillStyle = "#1F2229"; g.fillRect(0, 0, 128, 128);
         const size = b.type === "OUTLINE" ? 0.07 : b.type === "STAMP" ? 0.4 : 0.1;
-        drawStrokes(g, [strokeOf(b, pts, size, THUMB_COLOR[b.type] ?? "#FFFFFF")], 138, 138);
+        drawStrokes(g, [strokeOf(b, pts, size, THUMB_COLOR[b.type] ?? "#FFFFFF")], 128, 128);
         out[b.id] = c.toDataURL();
       }
       setThumbs(out);
@@ -793,14 +749,7 @@ export function BrushAddPage() {
         const s = stateRef.current;
         if (s.picking) {
           const src = photoCanvas();
-          if (src) {
-            const c = document.createElement("canvas"); c.width = 1; c.height = 1;
-            const g = c.getContext("2d")!;
-            g.drawImage(src, Math.max(0, Math.min(src.width - 1, x * src.width)), Math.max(0, Math.min(src.height - 1, y * src.height)), 1, 1, 0, 0, 1, 1);
-            const p = g.getImageData(0, 0, 1, 1).data;
-            const hex = `#${[p[0], p[1], p[2]].map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
-            setCustom(hex); setColor(hex);
-          }
+          if (src) { const hex = sampleHex(src, x, y); setCustom(hex); setColor(hex); }
           setPicking(false);
           return;
         }
@@ -834,46 +783,50 @@ export function BrushAddPage() {
     setStrokes({ ...strokes, i });
     setLive(build(strokes.list.slice(0, i)));
   };
+  const showColors = brush.colorPickerUse && mode === "brush";
 
   return (
     <>
       <input ref={paletteRef} type="color" hidden defaultValue="#ffffff" onChange={(e) => { const c = e.currentTarget.value.toUpperCase(); setCustom(c); setColor(c); }} />
-      <ControlRow bottom={186 + (brush.colorPickerUse ? 54 : 0)} undo={{ can: strokes.i > 0, on: () => stepStroke(-1) }} redo={{ can: strokes.i < strokes.list.length, on: () => stepStroke(1) }} onOriginal={setOriginal} />
-      {brush.colorPickerUse && (
-        <div className="no-scrollbar absolute inset-x-0 flex items-center overflow-x-auto" style={{ bottom: 186, height: 54, padding: "0 9.5px", background: "rgba(0,0,0,0.4)" }}>
-          <button type="button" onClick={() => setPicking((v) => !v)} className="relative flex flex-none items-center justify-center rounded-full" style={{ width: 32, height: 32, margin: "11px 8.5px", background: "#333333", opacity: picking ? 0.5 : 1 }}>
-            <Img name="icon_edit_color_picker" size={32} />
-          </button>
-          <button type="button" onClick={() => paletteRef.current?.click()} className="flex-none" style={{ width: 32, height: 32, margin: "11px 8.5px" }}>
-            <Img name="icon_edit_color_wheel" size={32} />
-          </button>
-          {custom && <ColorChip color={custom} selected={color === custom} onClick={() => setColor(custom)} style={{ margin: "11px 8.5px" }} />}
-          {BRUSH_COLORS.map((c) => <ColorChip key={c} color={c} selected={color === c && c !== custom} onClick={() => setColor(c)} darkOutline={c === "#000000"} style={{ margin: "11px 8.5px" }} />)}
+      <ControlRow bottom={MENU + (showColors ? 60 : 0)} undo={{ can: strokes.i > 0, on: () => stepStroke(-1) }} redo={{ can: strokes.i < strokes.list.length, on: () => stepStroke(1) }} onOriginal={setOriginal} />
+      {showColors && (
+        <div className="no-scrollbar absolute inset-x-3 z-20 flex h-[52px] items-center gap-3 overflow-x-auto rounded-lg bg-panel/90 px-3 shadow-lg ring-1 ring-line backdrop-blur-md" style={{ bottom: MENU + 8 }}>
+          <SwatchTool icon="pipette" label="Pick from the photo" active={picking} onClick={() => setPicking((v) => !v)} />
+          <SwatchTool icon="palette" label="Colour wheel" onClick={() => paletteRef.current?.click()} />
+          {custom && <ColorChip color={custom} selected={color === custom} onClick={() => setColor(custom)} />}
+          {BRUSH_COLORS.map((c) => <ColorChip key={c} color={c} selected={color === c && c !== custom} onClick={() => setColor(c)} />)}
         </div>
       )}
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: 186 }}>
-        <div className="absolute inset-x-0 top-0 flex items-center" style={{ height: 54 }}>
-          <button type="button" onClick={() => setMode("brush")} style={{ marginLeft: 24, padding: "10px 0", fontSize: 13, color: mode === "brush" ? "#ffffff" : "rgba(255,255,255,0.6)" }}>Brush</button>
-          <button type="button" onClick={() => setMode("eraser")} style={{ marginLeft: 20, padding: "10px 0", fontSize: 13, color: mode === "eraser" ? "#ffffff" : "rgba(255,255,255,0.6)" }}>Eraser</button>
+      <EditBar
+        title="Draw"
+        onClose={() => { setLive(null); openSub(null); }}
+        onConfirm={() => { if (visible.length) { commit(build(visible)); select(layerId); } else setLive(null); openSub(null); }}
+      />
+      <Dock className="flex flex-col justify-center gap-3">
+        <div className="flex items-center gap-3 px-4">
+          <Tabs look="segment" className="w-[150px] flex-none" items={[{ id: "brush", label: "Brush" }, { id: "eraser", label: "Eraser" }]} value={mode} onChange={setMode} />
+          <span className="flex-none text-[12px] font-medium text-fg-3">Size</span>
           <EditSeekBar
-            style={{ marginLeft: 24, marginRight: 48 }} value={sizes[mode]} min={0.01} max={1} def={mode === "eraser" ? 0.3 : brush.defaultStrength / 100}
+            value={sizes[mode]} min={0.01} max={1} def={mode === "eraser" ? 0.3 : brush.defaultStrength / 100}
             onChange={(v) => setSizes((s) => ({ ...s, [mode]: v }))}
           />
         </div>
-        <div className="no-scrollbar absolute inset-x-0 flex overflow-x-auto" style={{ top: 54, height: 69, padding: "0 8px", gap: 2 }}>
+        <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-4">
           {BRUSHES.map((b) => (
-            <button key={b.id} type="button" onClick={() => { setBrush(b); setMode("brush"); setSizes((s) => ({ ...s, brush: b.defaultStrength / 100 })); }} className="relative flex-none overflow-hidden" style={{ width: 69, height: 69 }}>
-              {thumbs[b.id] ? <img src={thumbs[b.id]} alt="" draggable={false} className="h-full w-full" /> : <img src={d("sticker_default")} alt="" className="h-full w-full" />}
-              {brush.id === b.id && <img src={d("edit_sticker_select")} alt="" className="absolute inset-0 h-full w-full" />}
+            <button
+              key={b.id} type="button" aria-pressed={brush.id === b.id}
+              onClick={() => { setBrush(b); setMode("brush"); setSizes((s) => ({ ...s, brush: b.defaultStrength / 100 })); }}
+              className="oe-press flex w-[64px] flex-none flex-col items-center gap-1.5"
+            >
+              <span className={cx("block h-16 w-16 overflow-hidden rounded-md bg-raised", brush.id === b.id && mode === "brush" && "ring-2 ring-accent ring-offset-2 ring-offset-panel")}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {thumbs[b.id] && <img src={thumbs[b.id]} alt="" draggable={false} className="h-full w-full" />}
+              </span>
+              <span className={cx("text-[11px] font-medium", brush.id === b.id ? "text-fg" : "text-fg-2")}>{b.name}</span>
             </button>
           ))}
         </div>
-        <TitleBar
-          title="Brush"
-          onClose={() => { setLive(null); openSub(null); }}
-          onConfirm={() => { if (visible.length) { commit(build(visible)); select(layerId); } else setLive(null); openSub(null); }}
-        />
-      </div>
+      </Dock>
     </>
   );
 }
@@ -892,21 +845,21 @@ export function LayerAdjustPage() {
   return (
     <>
       <ControlRow onOriginal={setOriginal}>
-        {it && <EditSeekBar style={{ marginLeft: 112, marginRight: 24 }} value={adj[it.key]} min={it.min} max={1} def={0} flashKey={flash} onChange={(v) => apply({ ...adj, [it.key]: v })} />}
+        {it && <EditSeekBar value={adj[it.key]} min={it.min} max={1} def={0} flashKey={flash} onChange={(v) => apply({ ...adj, [it.key]: v })} />}
       </ControlRow>
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: 186 }}>
-        <FeatureList count={LAYER_ADJUST_ITEMS.length}>
+      <EditBar title={`Adjust ${KIND_LABEL[layer.kind].toLowerCase()}`} onClose={() => { setLive(null); openSub(null); }} onConfirm={() => { commit(updateLayer(doc, layer.id, (l) => ({ ...l, adjust: adj }))); openSub(null); }} />
+      <Dock>
+        <FeatureList>
           {LAYER_ADJUST_ITEMS.map((i) => (
             <FeatureButton key={i.key} icon={i.icon} label={i.label} selected={sel === i.key} modified={Math.abs(adj[i.key]) > 0.001} onClick={() => { setSel(i.key); setFlash((n) => n + 1); }} />
           ))}
         </FeatureList>
-        <TitleBar title="Adjust" onClose={() => { setLive(null); openSub(null); }} onConfirm={() => { commit(updateLayer(doc, layer.id, (l) => ({ ...l, adjust: adj }))); openSub(null); }} />
-      </div>
+      </Dock>
     </>
   );
 }
 
-/* ================================================================== layer Eraser page */
+/* ================================================================== layer Erase page */
 
 export function LayerEraserPage() {
   const { doc, setLive, commit, openSub, setOriginal, setTool, frame, rect } = useEdit();
@@ -973,23 +926,22 @@ export function LayerEraserPage() {
   const touched = hist.list.length > entry.length || hist.i !== entry.length;
   return (
     <>
-      <ControlRow bottom={186 + 54} undo={touched ? { can: hist.i > 0, on: () => step(-1) } : undefined} redo={touched ? { can: hist.i < hist.list.length, on: () => step(1) } : undefined} onOriginal={setOriginal} hideOriginal={!touched} />
-      <div className="absolute inset-x-0 flex items-center" style={{ bottom: 186, height: 54, background: "rgba(0,0,0,0.37)" }}>
-        <span className="text-white" style={{ marginLeft: 20, fontSize: 13 }}>Size</span>
-        <EditSeekBar style={{ marginLeft: 24, marginRight: 52 }} value={size} min={0.01} max={1} def={0.5} onChange={setSize} />
-      </div>
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: 186 }}>
-        <div className="absolute inset-x-0 flex justify-center" style={{ top: 36, gap: 52 }}>
-          <FeatureButton icon="icon_edit_tab_eraser" label="Eraser" selected={tool === "eraser"} onClick={() => setEraseTool("eraser")} />
-          <FeatureButton icon="icon_edit_tab_brush" label="Restore" selected={tool === "restore"} onClick={() => setEraseTool("restore")} />
-          <FeatureButton icon="icon_edit_tab_reset" label="Reset" onClick={() => { setHist({ list: [], i: 0 }); setLive(withErase([])); }} />
+      <ControlRow undo={touched ? { can: hist.i > 0, on: () => step(-1) } : undefined} redo={touched ? { can: hist.i < hist.list.length, on: () => step(1) } : undefined} onOriginal={setOriginal} hideOriginal={!touched} />
+      <EditBar
+        title={`Erase ${KIND_LABEL[layer.kind].toLowerCase()}`}
+        onClose={() => { setLive(null); openSub(null); }}
+        onConfirm={() => { commit(withErase(hist.list.slice(0, hist.i))); openSub(null); }}
+      />
+      <Dock className="flex flex-col justify-center gap-4">
+        <div className="flex justify-center gap-2">
+          <FeatureButton icon="remove" label="Erase" selected={tool === "eraser"} onClick={() => setEraseTool("eraser")} />
+          <FeatureButton icon="brush" label="Restore" selected={tool === "restore"} onClick={() => setEraseTool("restore")} />
+          <FeatureButton icon="reset" label="Start over" onClick={() => { setHist({ list: [], i: 0 }); setLive(withErase([])); }} />
         </div>
-        <TitleBar
-          title="Eraser"
-          onClose={() => { setLive(null); openSub(null); }}
-          onConfirm={() => { commit(withErase(hist.list.slice(0, hist.i))); openSub(null); }}
-        />
-      </div>
+        <SliderRow label="Size" value={Math.round(size * 100)}>
+          <EditSeekBar value={size} min={0.01} max={1} def={0.5} level={false} onChange={setSize} />
+        </SliderRow>
+      </Dock>
     </>
   );
 }

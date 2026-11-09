@@ -1,47 +1,29 @@
 "use client";
 
-// EditActivity (video) → VideoEditFragment (photoend_video_edit_fragment.xml).
-// Preview (VideoPreviewTextureView, fit-centre above bottom_menu_guideline = 200dp), layout_video_edit_top_menu (52dp,
-// edit_video_shadow: close / sound / rotate / share / SAVE), video_edit_feature_menu_recycler_view (52dp icon tabs in
-// VideoEditFeatureMenuAdapter order) and the per-tab feature areas. Save → PercentProgressDialogFragment →
-// VideoSaveResultDialogFragment → EditConfirmFragment (VIDEO).
+// Video editor: top bar (back · sound · rotate · share · Save), the preview (tap to play or pause), and a dock with
+// the active tab's panel over the tab bar. Face shape and Liquify open as full tool pages. Saving shows a progress
+// card, then the Saved page.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { d } from "@/components/ui/legacy-drawable";
+import { Button, Dialog, Icon, IconButton, cx, toast } from "@/components/ui";
 import { useBackHandler } from "@/lib/back";
-import { BASE } from "@/lib/base";
+import { getAsset } from "@/lib/assets";
 import { getPhoto, savePhoto } from "@/lib/store";
 import { StickerRuntime, parseSticker, type FaceData } from "@/lib/face";
 import { STICKER_BASE, findSticker, type Sticker } from "@/data/camera/stickers";
-import { AlertDialog, ConfirmDialog } from "@/components/gallery/parts";
 import { VideoEngine, decodeReverse, rotatedSize } from "./engine";
-import { MAX_MS, MENU_H, PRIMARY, STR, TABS, TAB_H, docModified, initialDoc, type Reshape, type Rotation, type TabId, type VDoc } from "./model";
+import { DOCK_H, MAX_MS, STR, TABS, TAB_H, docModified, initialDoc, type Reshape, type Rotation, type TabId, type VDoc } from "./model";
 import { TrimPanel } from "./TrimPanel";
-import { EffectPanel, MusicList, MusicPanel, SpeedPanel } from "./panels";
+import { MusicList, MusicPanel, SpeedPanel } from "./panels";
 import { VideoFilterPanel } from "./FilterPanel";
 import { ArFilterPanel, BeautyPanel, RetouchPanel, dragToOp } from "./FacePanels";
-import { LoadingLayer, PercentDialog, SaveResult, Toast, useToast } from "./ui";
+import { LoadingLayer, PercentDialog } from "./ui";
 import { SaveConfirm, ShareBar } from "./SaveConfirm";
 
-export interface DevInit { sample?: boolean; tab?: string; save?: boolean; share?: boolean; filter?: string; speed?: number; reverse?: boolean; sticker?: number; music?: boolean }
+const TOP_H = 52;
+const PANEL_H = DOCK_H - TAB_H;
 
-/** Thumbnails of `count` evenly spaced frames in [start, end] (Glide video frames for the effect strip / face list). */
-async function frameThumbs(url: string, start: number, end: number, count: number, size: number): Promise<string[]> {
-  const v = document.createElement("video");
-  v.muted = true; v.preload = "auto"; v.src = url;
-  await new Promise<void>((res, rej) => { v.onloadeddata = () => res(); v.onerror = () => rej(new Error("v")); });
-  const c = document.createElement("canvas");
-  const s = (size * 2) / Math.min(v.videoWidth, v.videoHeight);
-  c.width = Math.round(v.videoWidth * s); c.height = Math.round(v.videoHeight * s);
-  const out: string[] = [];
-  for (let i = 0; i < count; i++) {
-    await new Promise<void>((res) => { v.onseeked = () => res(); v.currentTime = (start + ((end - start) * (i + 0.5)) / count) / 1000; });
-    c.getContext("2d")!.drawImage(v, 0, 0, c.width, c.height);
-    out.push(c.toDataURL("image/jpeg", 0.6));
-  }
-  v.removeAttribute("src"); v.load();
-  return out;
-}
+export interface DevInit { sample?: boolean; tab?: string; save?: boolean; share?: boolean; filter?: string; speed?: number; reverse?: boolean; sticker?: number; music?: boolean }
 
 function faceThumb(snap: HTMLCanvasElement, f: FaceData): string {
   let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
@@ -71,16 +53,13 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
   const [original, setOriginal] = useState(false);
   const [musicOpen, setMusicOpen] = useState(false);
   const [leave, setLeave] = useState(false);
-  const [toast, showToast] = useToast();
   const [tip5min, setTip5min] = useState(false);
   const [progress, setProgress] = useState<{ value: number; title: string; sub?: string; cancel?: () => void } | null>(null);
-  const [result, setResult] = useState<{ ok: boolean; text?: string } | null>(null);
   const [saved, setSaved] = useState<{ url: string; blob: Blob } | null>(null);
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [faces, setFaces] = useState<FaceData[]>([]);
   const [faceReady, setFaceReady] = useState(false);
   const [stickerLoading, setStickerLoading] = useState<number | null>(null);
-  const [stripThumbs, setStripThumbs] = useState<string[]>([]);
   const [faceThumbs, setFaceThumbs] = useState<string[]>([]);
   const [selFace, setSelFace] = useState(0);
   const [brush, setBrush] = useState(2);
@@ -107,7 +86,7 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     let url = "";
     (async () => {
       let blob: Blob | undefined;
-      if (dev?.sample) blob = await fetch(`${BASE}/video/sample.mp4`).then((r) => r.blob()).catch(() => undefined);
+      if (dev?.sample) blob = await fetch(getAsset("video", "clip-1")).then((r) => r.blob()).catch(() => undefined);
       else blob = (await getPhoto(id).catch(() => undefined))?.blob;
       if (!alive) return;
       if (!blob || !blob.type.startsWith("video/")) { setStatus("error"); return; }
@@ -158,13 +137,7 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     }
   }, [live, sticker, original, src, twoDepth, tab]);
 
-  // effect strip / face list thumbnails
-  useEffect(() => {
-    if (!src || tab !== "Effect") return;
-    let alive = true;
-    void frameThumbs(src.url, doc.start, doc.end, 12, 28).then((t) => alive && setStripThumbs(t)).catch(() => undefined);
-    return () => { alive = false; };
-  }, [src, tab, doc.start, doc.end]);
+  // face thumbnails for the Liquify face picker
   useEffect(() => {
     if (twoDepth !== "Retouch" || !faces.length || !engineRef.current) return;
     const snap = engineRef.current.snapshot(720);
@@ -177,7 +150,7 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     if (process.env.NODE_ENV !== "production") (window as unknown as { __ve?: unknown }).__ve = { faces: faces.length, faceReady, pos, playing, reverse: live.reverse, filter: live.filter.key, sticker: live.stickerId, retouch: live.retouch.length };
   });
 
-  // 5-minute tooltip (tooltip_textview) fades after 3 s
+  // the 5-minute hint fades after 3 s
   useEffect(() => { if (!tip5min) return; const t = window.setTimeout(() => setTip5min(false), 3000); return () => window.clearTimeout(t); }, [tip5min]);
 
   /* ---------------------------------------------------------------- doc ops */
@@ -198,11 +171,11 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
       eng.setReverse(r);
       update((x) => ({ ...x, reverse: true }));
       setProgress(null);
-      if (!live.muted) showToast(STR.reverseMute);
+      if (!live.muted) toast(STR.reverseMute, { icon: "mute" });
       eng.play();
     } catch {
       setProgress(null);
-      if (!signal.cancelled) showToast(STR.reverseFail);
+      if (!signal.cancelled) toast(STR.reverseFail, { icon: "alert", tone: "danger" });
     }
   };
 
@@ -214,7 +187,7 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
       setTwoDepth(t);
       setRedo([]);
       if (t === "Retouch") setRetouchTip(STR.manualTooltip);
-      void engineRef.current?.ensureTracker().then(() => setFaceReady(true)).catch(() => showToast(STR.unsupported));
+      void engineRef.current?.ensureTracker().then(() => setFaceReady(true)).catch(() => toast(STR.unsupported, { icon: "alert" }));
       return;
     }
     setTab(t);
@@ -249,7 +222,7 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
       return out;
     } catch {
       setProgress(null);
-      if (!signal.cancelled) { setResult({ ok: false }); window.setTimeout(() => setResult(null), 3000); }
+      if (!signal.cancelled) toast(STR.saveFail, { icon: "alert", tone: "danger" });
       return null;
     }
   };
@@ -257,13 +230,12 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     const out = await runExport(false);
     if (!out) { engineRef.current?.play(); return; }
     try {
-      await savePhoto(out.blob, out.width, out.height, "B612", { duration: out.duration });
+      await savePhoto(out.blob, out.width, out.height, undefined, { duration: out.duration });
     } catch {
-      setResult({ ok: false }); window.setTimeout(() => setResult(null), 3000);
+      toast(STR.saveFail, { icon: "alert", tone: "danger" });
       return;
     }
-    setResult({ ok: true });
-    window.setTimeout(() => { setResult(null); setSaved({ url: URL.createObjectURL(out.blob), blob: out.blob }); }, 1500);
+    setSaved({ url: URL.createObjectURL(out.blob), blob: out.blob });
   };
   const onShare = async () => {
     const out = await runExport(true);
@@ -302,20 +274,22 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
     finish();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shareBlob, musicOpen, twoDepth, doc, src, finish]);
-  // hardware back (VideoEditFragment.onBackPressed): dialogs / share bar / music list / the saved page register their
-  // own handlers above this one; here: 2-depth page (Beauty / Reshape) → leave (with the leave dialog when modified)
+  // back key: dialogs, the share sheet, the music sheet and the Saved page register their own handlers above this
+  // one; here: an open tool page, then leaving (asking first when there are unsaved edits)
   useBackHandler(() => {
-    if (progress) return; // saving / reversing: the percent dialog keeps the screen
+    if (progress) return; // saving or reversing: the progress card keeps the screen
     onBack();
   }, !saved);
 
   /* ---------------------------------------------------------------- geometry */
   const W = size.w, H = size.h;
-  const previewH = H - TAB_H;
+  // the preview fits between the top bar and the dock (or the taller tool page)
+  const bottomH = twoDepth ? 236 : DOCK_H;
+  const areaH = Math.max(1, H - TOP_H - bottomH - 16);
   const [rw, rh] = src ? rotatedSize(src.w, src.h, live.rotation) : [9, 16];
-  const scale = Math.min(W / rw, previewH / rh);
+  const scale = Math.min((W - 24) / rw, areaH / rh);
   const pw = Math.round(rw * scale), ph = Math.round(rh * scale);
-  const px = (W - pw) / 2, py = (previewH - ph) / 2;
+  const px = (W - pw) / 2, py = TOP_H + 8 + (areaH - ph) / 2;
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
@@ -351,50 +325,67 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
   const tabDef = TABS.find((t) => t.id === tab)!;
   const showMenus = !twoDepth;
   const selectSticker = (s: Sticker | null) => update((x) => ({ ...x, stickerId: s?.id ?? null }));
+  const soundOff = live.muted || live.reverse;
 
   return (
-    <div ref={rootRef} className="absolute inset-0 select-none overflow-hidden bg-black" data-video-edit>
-      {/* preview_root_layout */}
-      <div className="absolute" style={{ left: px, top: py, width: pw, height: ph, touchAction: "none" }} onPointerDown={onPreviewDown} onPointerMove={onPreviewMove} onPointerUp={onPreviewUp} onPointerCancel={onPreviewUp} data-preview>
+    <div ref={rootRef} className="absolute inset-0 select-none overflow-hidden bg-bg text-fg" data-video-edit>
+      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 80% at 50% 40%, var(--oe-panel), var(--oe-bg) 70%)" }} />
+      {/* preview: tap to play / pause; drag on a face in Liquify */}
+      <div className="absolute overflow-hidden rounded-md shadow-[0_8px_32px_rgba(0,0,0,0.45)]" style={{ left: px, top: py, width: pw, height: ph, touchAction: "none" }} onPointerDown={onPreviewDown} onPointerMove={onPreviewMove} onPointerUp={onPreviewUp} onPointerCancel={onPreviewUp} data-preview>
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
       </div>
-      {/* play_icon_imageview (edit_video_effect_play, padding 5) */}
       {status === "ok" && !playing && !twoDepth && !progress && (
         <div className="pointer-events-none absolute flex items-center justify-center" style={{ left: px, top: py, width: pw, height: ph }}>
-          <img src={d("edit_video_effect_play")} alt="" style={{ width: 60, height: 60, padding: 5, boxSizing: "content-box" }} draggable={false} />
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-glass text-white backdrop-blur-md"><Icon name="play" size={30} filled /></span>
         </div>
       )}
-      {/* tooltip_textview: 16dp white, shadow #4c000000 r4, 62dp above the guideline, 20%..80% */}
-      {tip5min && <div className="pointer-events-none absolute truncate text-center text-white" style={{ left: "20%", right: "20%", bottom: TAB_H + 62, fontSize: 16, textShadow: "0 0 4px rgba(0,0,0,0.3)" }}>{STR.tooltip5min}</div>}
+      {tip5min && (
+        <div className="pointer-events-none absolute inset-x-0 z-10 flex justify-center px-10" style={{ bottom: DOCK_H + 64 }}>
+          <span className="rounded-md bg-glass px-3.5 py-2 text-center text-[13px] text-white backdrop-blur-md">{STR.tooltip5min}</span>
+        </div>
+      )}
 
-      {/* layout_video_edit_top_menu */}
+      {/* top bar */}
       {showMenus && (
-        <div className="absolute inset-x-0 top-0 flex items-center" style={{ height: 52, background: "linear-gradient(to bottom, rgba(0,0,0,0.2), transparent)" }}>
-          <button type="button" onClick={onBack} aria-label="Back" style={{ marginLeft: 8, width: 34, height: 34 }}>
-            <img src={d("icon_edit_top_back_shadow")} alt="" style={{ width: 34, height: 34 }} draggable={false} />
-          </button>
-          <div className="flex-1" />
-          <button type="button" aria-label="Sound" onClick={() => update((x) => ({ ...x, muted: !x.muted }))} style={{ width: 34, height: 34, marginRight: 12 }}>
-            <img src={d(live.muted || live.reverse ? "icon_video_top_sound_off_shadow" : "icon_video_top_sound_on_shadow")} alt="" style={{ width: 34, height: 34 }} draggable={false} />
-          </button>
-          <button type="button" aria-label="Rotate" onClick={() => update((x) => ({ ...x, rotation: (((x.rotation + 90) % 360) as Rotation) }))} style={{ width: 34, height: 34, marginRight: 12 }}>
-            <img src={d("icon_video_top_rotation_shadow")} alt="" style={{ width: 34, height: 34 }} draggable={false} />
-          </button>
-          <button type="button" aria-label="Share" onClick={() => void onShare()} style={{ width: 34, height: 34, marginRight: 12 }}>
-            <img src={d("icon_edit_top_share_shadow")} alt="" style={{ width: 34, height: 34 }} draggable={false} />
-          </button>
-          <button type="button" onClick={() => void onSave()} className="flex items-center text-white" style={{ height: 32, padding: "0 15px", marginRight: 8, borderRadius: 18, background: PRIMARY, fontSize: 14 }}>{STR.save}</button>
+        <div className="absolute inset-x-0 top-0 z-30 flex items-center gap-1 bg-bg/95 px-2 backdrop-blur-md" style={{ height: TOP_H }}>
+          <IconButton icon="back" label="Back" variant="raised" onClick={onBack} />
+          <div className="flex flex-1 items-center justify-center gap-1">
+            <IconButton icon={soundOff ? "mute" : "sound"} label={soundOff ? "Sound off" : "Sound on"} active={soundOff} disabled={live.reverse} onClick={() => update((x) => ({ ...x, muted: !x.muted }))} />
+            <IconButton icon="rotate-right" label="Rotate" onClick={() => update((x) => ({ ...x, rotation: (((x.rotation + 90) % 360) as Rotation) }))} />
+            <IconButton icon="share" label="Share" onClick={() => void onShare()} />
+          </div>
+          <Button size="sm" icon="save" className="h-10 rounded-full px-4" onClick={() => void onSave()}>{STR.save}</Button>
         </div>
       )}
 
-      {/* feature areas (between bottom_menu_guideline and the menu bar). The full-height box itself must not take
-          touches, or it swallows the top menu (Back / Sound / Rotate / Share / SAVE) and the preview tap. */}
+      {/* dock: the active tab's panel over the tab bar */}
+      {showMenus && (
+        <div className="absolute inset-x-0 bottom-0 z-10 rounded-t-xl bg-panel shadow-[0_-8px_24px_rgba(0,0,0,0.35)]" style={{ height: DOCK_H }}>
+          <div className="absolute inset-x-0 bottom-0 border-t border-line" style={{ height: TAB_H }}>
+            <div role="tablist" aria-label="Video tools" className="no-scrollbar flex h-full items-stretch overflow-x-auto px-1.5">
+              {TABS.map((t) => {
+                const on = t.id === tabDef.id && !t.twoDepth;
+                return (
+                  <button
+                    key={t.id} type="button" role="tab" aria-selected={on} data-tab={t.id} onClick={() => openTab(t.id)}
+                    className={cx("oe-press relative flex w-[62px] flex-none flex-col items-center justify-center gap-1", on ? "text-fg" : "text-fg-3")}
+                  >
+                    <span className={cx("absolute top-0 h-[3px] w-6 rounded-b-full bg-accent transition-opacity", on ? "opacity-100" : "opacity-0")} />
+                    <Icon name={t.icon} size={21} />
+                    <span className="whitespace-nowrap text-[11px] font-medium">{t.title}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
       {status === "ok" && src && showMenus && (
-        <div className="pointer-events-none absolute inset-x-0 [&>*]:pointer-events-auto" style={{ top: 0, bottom: MENU_H }}>
+        <>
           {tab === "VideoEdit" && (
             <TrimPanel
               url={src.url} width={W} duration={src.duration} start={live.start} end={live.end} pos={pos} speed={live.speed}
-              top={H - TAB_H + 52}
+              bottom={TAB_H}
               onStart={() => engineRef.current?.pause()}
               onMove={(s, e, edge) => { update((x) => ({ ...x, start: s, end: e })); engineRef.current?.seek(edge === "L" ? s : e); }}
               onEnd={(s, e) => {
@@ -404,43 +395,31 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
               }}
             />
           )}
-          {tab === "Speed" && (
-            <SpeedPanel
-              speed={live.speed} reverse={live.reverse} durationMs={live.end - live.start}
-              onSpeed={(s) => update((x) => ({ ...x, speed: s }))}
-              onSpeedCommit={(s) => { update((x) => ({ ...x, speed: s })); engineRef.current?.seek(live.start); engineRef.current?.play(); }}
-              onReverse={(on) => void setReverse(on)}
-            />
-          )}
-          {tab === "Music" && <MusicPanel onChoose={() => { setMusicOpen(true); }} />}
           {tab === "Filter" && (
             <VideoFilterPanel
-              value={live.filter}
+              value={live.filter} sliderBottom={DOCK_H} panelBottom={TAB_H} panelH={PANEL_H}
               onChange={(f) => update((x) => ({ ...x, filter: f }))}
               onCommit={(f) => update((x) => ({ ...x, filter: f }))}
-              onToast={showToast}
             />
           )}
-          {tab === "Effect" && <EffectPanel thumbs={stripThumbs} pos={pos} start={live.start} end={live.end} width={W} onSeek={(ms) => { engineRef.current?.pause(); engineRef.current?.seek(ms); }} />}
-          {tab === "Frame" && <ArFilterPanel selectedId={live.stickerId} loadingId={stickerLoading} onSelect={selectSticker} />}
-        </div>
+          {(tab === "Speed" || tab === "Music" || tab === "Frame") && (
+            <div className="absolute inset-x-0 z-20" style={{ bottom: TAB_H, height: PANEL_H }}>
+              {tab === "Speed" && (
+                <SpeedPanel
+                  speed={live.speed} reverse={live.reverse} durationMs={live.end - live.start}
+                  onSpeed={(s) => update((x) => ({ ...x, speed: s }))}
+                  onSpeedCommit={(s) => { update((x) => ({ ...x, speed: s })); engineRef.current?.seek(live.start); engineRef.current?.play(); }}
+                  onReverse={(on) => void setReverse(on)}
+                />
+              )}
+              {tab === "Music" && <MusicPanel onChoose={() => { setMusicOpen(true); }} />}
+              {tab === "Frame" && <ArFilterPanel selectedId={live.stickerId} loadingId={stickerLoading} onSelect={selectSticker} />}
+            </div>
+          )}
+        </>
       )}
 
-      {/* video_edit_feature_menu_recycler_view (52dp; 58dp cells, 44dp BottomTabImageView: 100% selected / 40% alpha) */}
-      {showMenus && (
-        <div className="no-scrollbar absolute inset-x-0 bottom-0 flex overflow-x-auto bg-black" style={{ height: MENU_H }}>
-          {TABS.map((t) => {
-            const on = t.id === tabDef.id;
-            return (
-              <button key={t.id} type="button" aria-label={t.title} data-tab={t.id} onClick={() => openTab(t.id)} className="flex flex-none items-center justify-center" style={{ width: 58, height: MENU_H }}>
-                <span style={{ width: 44, height: 44, background: "#ffffff", opacity: on ? 1 : 0.4, WebkitMaskImage: `url(${d(t.icon)})`, maskImage: `url(${d(t.icon)})`, WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* two_depth_fragment_container */}
+      {/* full tool pages */}
       {twoDepth === "Reshape" && draft && (
         <BeautyPanel
           value={draft.reshape} faces={faces} faceReady={faceReady} playing={playing} pos={pos} start={live.start} end={live.end}
@@ -466,16 +445,15 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
       {musicOpen && <MusicList onClose={() => setMusicOpen(false)} />}
 
       {status === "loading" && <LoadingLayer />}
-      {status === "error" && (
-        <AlertDialog message="Unable to load item. Please try again." onOk={finish} />
-      )}
+      <Dialog open={status === "error"} onClose={finish} icon="video" title="Couldn't open this video">
+        It may have been deleted, or this browser can&apos;t play it.
+      </Dialog>
       {progress && <PercentDialog value={progress.value} title={progress.title} sub={progress.sub} onCancel={progress.cancel} />}
-      {result && <SaveResult ok={result.ok} text={result.text} />}
-      {leave && <ConfirmDialog message={STR.leave} cancel={STR.cancel} ok={STR.leaveOk} onCancel={() => setLeave(false)} onOk={finish} />}
+      <Dialog open={leave} onClose={() => setLeave(false)} icon="trash" destructive title={STR.leaveTitle} confirm={STR.leaveOk} cancel={STR.cancel} onConfirm={finish}>
+        {STR.leave}
+      </Dialog>
       <ShareBar open={!!shareBlob} blob={shareBlob} onClose={() => { setShareBlob(null); engineRef.current?.play(); }} />
       {saved && <SaveConfirm url={saved.url} blob={saved.blob} onClose={() => { setSaved(null); engineRef.current?.play(); }} onBack={() => router.push("/gallery")} />}
-      <Toast text={toast} />
-      <style>{"@keyframes ve-spin { to { transform: rotate(360deg) } }"}</style>
     </div>
   );
 }

@@ -3,10 +3,10 @@
 // Settings: capture options, beauty, saving, notifications, privacy & local data, and about.
 import { useEffect, useState } from "react";
 import { Dialog, ListGroup, ListRow, ScrollBody, Screen, Switch, Tabs, TopBar, clearLocalData, toast, useGoBack } from "@/components/ui";
-import { SETTING_DEFAULTS, useSetting } from "@/lib/settings";
+import { SETTINGS, SETTING_DEFAULTS, useSetting, type SettingKey } from "@/lib/settings";
 import { saveRouteLabel, useSaveRoute } from "@/components/saveroute/SaveRoute";
 
-function useBool(key: keyof typeof SETTING_DEFAULTS) {
+function useBool(key: SettingKey) {
   return useSetting<boolean>(key, SETTING_DEFAULTS[key]);
 }
 
@@ -22,14 +22,14 @@ export const formatBytes = (b: number) => (b < 1e6 ? `${Math.round(b / 1e3)} KB`
 
 export function CameraSettings() {
   const back = useGoBack("/");
-  const [hiRes, setHiRes] = useBool("highResolutionMode");
-  const [mirror, setMirror] = useBool("isMirrorMode");
-  const [blemish, setBlemish] = useBool("keyIsAntiBlemishMode");
-  const [grid, setGrid] = useBool("gridPreviewMode");
-  const [location, setLocation] = useBool("isUseLocationExif");
-  const [mark, setMark] = useBool("isUseWatermark_v510");
-  const [male, setMale] = useBool("optimizeMaleMakeupStatus");
-  const [cleanup, setCleanup] = useBool("isUseStorageOptimization");
+  const [hiRes, setHiRes] = useBool(SETTINGS.highResolution);
+  const [mirror, setMirror] = useBool(SETTINGS.mirrorFront);
+  const [blemish, setBlemish] = useBool(SETTINGS.antiBlemish);
+  const [grid, setGrid] = useBool(SETTINGS.gridLines);
+  const [location, setLocation] = useBool(SETTINGS.locationExif);
+  const [mark, setMark] = useBool(SETTINGS.watermark);
+  const [male, setMale] = useBool(SETTINGS.optimiseMaleMakeup);
+  const [cleanup, setCleanup] = useBool(SETTINGS.storageOptimisation);
   const route = useSaveRoute();
   const used = useStorageEstimate();
   const [confirmClear, setConfirmClear] = useState(false);

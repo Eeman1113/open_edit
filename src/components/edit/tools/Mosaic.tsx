@@ -1,29 +1,29 @@
 "use client";
 
-// EPMosaicFragment (fragment_edit_photo_tools_mosaic.xml): colour row, effect list, vertical slider list,
-// Brush / Eraser slide tab, stroke undo/redo. The effect list is server content (SCP asset menu MOSAIC/EDIT);
-// the web port ships a local catalogue of the 8 native types with thumbnails rendered from the photo.
+// Pixelate: paint blocks, polygons, paint dabs or blur over parts of the photo, with an eraser, a colour tint for some
+// styles and per-stroke undo. Effect previews are rendered from the photo itself.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Tabs, cx } from "@/components/ui";
 import { useEdit } from "../ctx";
-import { CtrlIcon, EditSeekBar, Img, PRIMARY, Tint } from "../ui";
+import { ColorChip, ControlRow, EditSeekBar, SliderRow, SwatchTool, ThumbItem } from "../ui";
 import {
-  BrushRing, copyCanvas, lerp, MENU, newCanvas, paintThrough, Panel, PhotoOverlay, sampleHex, Swatch,
+  BrushRing, copyCanvas, lerp, MENU, newCanvas, paintThrough, Panel, PhotoOverlay, sampleHex,
   useBake, useHold, usePhotoArea, useStrokeCanvas, useStrokeInput, useStrokes, type MStroke, usePhotoSnapshot } from "./common";
 import { isBlurType, mosaicEffect, type MosaicType } from "./effects";
 
-interface MosaicItem { id: string; type: MosaicType; usesInnerColorType: boolean; defaultStrength: number; defaultSize: number }
+interface MosaicItem { id: string; name: string; type: MosaicType; usesInnerColorType: boolean; defaultStrength: number; defaultSize: number }
 const ITEMS: MosaicItem[] = [
-  { id: "square", type: "MOSAIC_Square", usesInnerColorType: false, defaultStrength: 50, defaultSize: 30 },
-  { id: "triangle", type: "MOSAIC_Triangle", usesInnerColorType: false, defaultStrength: 50, defaultSize: 30 },
-  { id: "hexagon", type: "MOSAIC_Hexagon", usesInnerColorType: false, defaultStrength: 50, defaultSize: 30 },
-  { id: "oil", type: "MOSAIC_OIL", usesInnerColorType: false, defaultStrength: 100, defaultSize: 30 },
-  { id: "oilcolor", type: "MOSAIC_OIL_COLOR", usesInnerColorType: true, defaultStrength: 100, defaultSize: 30 },
-  { id: "gaussian", type: "BLUR_Gaussian", usesInnerColorType: true, defaultStrength: 100, defaultSize: 30 },
-  { id: "motion", type: "BLUR_Motion", usesInnerColorType: false, defaultStrength: 100, defaultSize: 30 },
-  { id: "horizontal", type: "BLUR_Horizontal", usesInnerColorType: true, defaultStrength: 100, defaultSize: 30 },
+  { id: "square", name: "Squares", type: "MOSAIC_Square", usesInnerColorType: false, defaultStrength: 50, defaultSize: 30 },
+  { id: "triangle", name: "Triangles", type: "MOSAIC_Triangle", usesInnerColorType: false, defaultStrength: 50, defaultSize: 30 },
+  { id: "hexagon", name: "Hexagons", type: "MOSAIC_Hexagon", usesInnerColorType: false, defaultStrength: 50, defaultSize: 30 },
+  { id: "oil", name: "Paint", type: "MOSAIC_OIL", usesInnerColorType: false, defaultStrength: 100, defaultSize: 30 },
+  { id: "oilcolor", name: "Tinted", type: "MOSAIC_OIL_COLOR", usesInnerColorType: true, defaultStrength: 100, defaultSize: 30 },
+  { id: "gaussian", name: "Blur", type: "BLUR_Gaussian", usesInnerColorType: true, defaultStrength: 100, defaultSize: 30 },
+  { id: "motion", name: "Motion", type: "BLUR_Motion", usesInnerColorType: false, defaultStrength: 100, defaultSize: 30 },
+  { id: "horizontal", name: "Streak", type: "BLUR_Horizontal", usesInnerColorType: true, defaultStrength: 100, defaultSize: 30 },
 ];
-/** InterfaceC20270a built-in colours */
-const COLORS = ["#FFFFFF", "#FF3827", "#FF7421", "#FFC300", "#6CC037", "#32C5FF", "#0041E6", "#000000"];
+/** Tint colours for the styles that take one. */
+const COLORS = ["#FFFFFF", "#FF5D73", "#FF8A00", "#FFD23F", "#2BB673", "#4CC9F0", "#5B5BD6", "#1B1B1F"];
 const colorUsable = (it: MosaicItem) => it.usesInnerColorType && (it.type === "MOSAIC_OIL_COLOR" || it.type === "BLUR_Gaussian" || it.type === "BLUR_Horizontal");
 
 type Vals = { filter: number; strength: number; size: number };
@@ -92,7 +92,7 @@ export function MosaicTool() {
     });
   };
 
-  // thumbnails rendered from the centre of the photo (server thumbnails aren't available)
+  // previews rendered from the centre of the photo
   const thumbs = useMemo(() => {
     if (!src) return {} as Record<string, string>;
     const m = Math.min(src.width, src.height);
@@ -107,11 +107,12 @@ export function MosaicTool() {
   const rows: { key: keyof Vals; label: string; min: number; def: number }[] = mode === "eraser"
     ? [{ key: "strength", label: "Strength", min: 0.01, def: 0.4 }, { key: "size", label: "Size", min: 0.01, def: 0.8 }]
     : [
-        ...(item.type === "BLUR_Horizontal" ? [{ key: "filter" as const, label: "Filter", min: 0, def: 0.1 }] : []),
-        { key: "strength", label: isBlurType(item.type) ? "Strength" : "Scale", min: 0.01, def: item.defaultStrength / 100 },
-        { key: "size", label: "Size", min: 0.01, def: item.defaultSize / 100 },
+        ...(item.type === "BLUR_Horizontal" ? [{ key: "filter" as const, label: "Tint", min: 0, def: 0.1 }] : []),
+        { key: "strength", label: isBlurType(item.type) ? "Strength" : "Block size", min: 0.01, def: item.defaultStrength / 100 },
+        { key: "size", label: "Brush size", min: 0.01, def: item.defaultSize / 100 },
       ];
-  const sliderH = rows.length * 43 + 35;
+  const sliderH = rows.length * 40 + 12;
+  const tintable = mode === "brush" && colorUsable(item);
 
   useEffect(() => () => cache.current.clear(), []);
 
@@ -122,64 +123,38 @@ export function MosaicTool() {
         <BrushRing at={dragging ? { x: area.x + area.w / 2, y: area.y + area.h / 2 } : ring} r={ringR} />
       </PhotoOverlay>
 
-      {/* tab_brush_type: vertical SnowSlideTab (Brush / Eraser) */}
-      <div className="absolute z-20 flex flex-col" style={{ right: 8, bottom: MENU + sliderH + 54 + 10, padding: 2.5, borderRadius: 19.5, background: "rgba(0,0,0,0.4)" }} onPointerDown={(e) => e.stopPropagation()}>
-        {(["brush", "eraser"] as const).map((m) => (
-          <button key={m} type="button" onClick={() => setMode(m)} className="flex items-center justify-center" style={{ width: 34, height: 34, borderRadius: 17, background: mode === m ? "#ffffff" : "transparent" }}>
-            <Img name={m === "brush" ? (mode === m ? "icon_edit_brush_on" : "icon_edit_brush_off") : (mode === m ? "icon_edit_erase_on" : "icon_edit_erase_off")} size={34} />
-          </button>
-        ))}
-      </div>
+      <ControlRow bottom={MENU + sliderH + 8} undo={strokes.undo} redo={strokes.redo} onOriginal={hold} originalEnabled={strokes.visible.length > 0} />
 
-      {/* container_control */}
-      <div className="absolute inset-x-0 z-20 flex items-center" style={{ bottom: MENU + sliderH, height: 54 }} onPointerDown={(e) => e.stopPropagation()}>
-        <CtrlIcon name="undo" enabled={strokes.undo.can} onClick={strokes.undo.on} style={{ marginLeft: 10 }} />
-        <CtrlIcon name="redo" enabled={strokes.redo.can} onClick={strokes.redo.on} style={{ marginLeft: 10 }} />
-        <span className="flex-1" />
-        <CtrlIcon name="original" enabled={strokes.visible.length > 0} onHold={hold} style={{ marginRight: 10 }} />
-      </div>
-
-      {/* list_slider (background only while dragging) */}
-      <div className="absolute inset-x-0 z-20" style={{ bottom: MENU, height: sliderH, padding: "17.5px 0", background: dragging ? "rgba(0,0,0,0.4)" : "transparent" }} onPointerDown={(e) => e.stopPropagation()}>
+      <div className="absolute inset-x-3 z-20 flex flex-col justify-center rounded-lg bg-panel/90 py-1.5 shadow-lg ring-1 ring-line backdrop-blur-md" style={{ bottom: MENU + 8, height: sliderH }} onPointerDown={(e) => e.stopPropagation()}>
         {rows.map((r) => (
-          <div key={r.key} className="flex items-center" style={{ height: 43 }}>
-            <span className="flex-none truncate text-white" style={{ marginLeft: 20, width: 80, fontSize: 13, textShadow: "0 0 2px rgba(0,0,0,0.3)" }}>{r.label}</span>
+          <SliderRow key={r.key} label={r.label} className="h-10 px-3">
             <EditSeekBar
-              style={{ marginLeft: 24, marginRight: 52 }}
               value={mode === "eraser" ? eraser[r.key as "strength" | "size"] : v[r.key]} min={r.min} max={1} def={r.def}
               onChange={(x) => { setDragging(r.key === "size"); if (mode === "eraser") setEraser((o) => ({ ...o, [r.key]: x })); else setV({ [r.key]: x }); }}
               onRelease={() => setDragging(false)}
             />
-          </div>
+          </SliderRow>
         ))}
       </div>
 
-      <Panel title="Mosaic" onClose={() => openSub(null)} onConfirm={confirm}>
-        {/* colour row (top 54dp) */}
-        <div className="absolute inset-x-0 top-0 flex items-center" style={{ height: 54 }}>
-          <button type="button" onClick={() => setColor(null)} className="relative flex h-full flex-none items-center" style={{ width: 49 }}>
-            <Tint name="icon_sticker_tab_none" size={35} color="#ffffff" style={{ marginLeft: 6 }} />
-            <span className="absolute right-0" style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)" }} />
-          </button>
-          <div className="no-scrollbar flex flex-1 items-center overflow-x-auto" style={{ height: 32, padding: "0 17px", gap: 17 }}>
-            <button type="button" onClick={() => setPicking((p) => !p)} className="flex-none rounded-full" style={{ width: 32, height: 32, background: "#333333" }}><Img name="icon_edit_color_picker" size={32} /></button>
-            <button type="button" onClick={() => wheelRef.current?.click()} className="flex-none" style={{ width: 32, height: 32 }}><Img name="icon_edit_color_wheel" size={32} /></button>
-            {picked && <Swatch color={picked} selected={color === picked} onClick={() => setColor(picked)} />}
-            {palette && <Swatch color={palette} selected={color === palette && palette !== picked} onClick={() => setColor(palette)} />}
-            {COLORS.map((c) => <Swatch key={c} color={c} selected={color === c && c !== picked && c !== palette} onClick={() => setColor(c)} />)}
+      <Panel title="Pixelate" onClose={() => openSub(null)} onConfirm={confirm}>
+        <div className="flex h-full flex-col justify-center gap-3">
+          <div className="flex items-center gap-3 pl-4">
+            <Tabs look="segment" className="w-[150px] flex-none" items={[{ id: "brush", label: "Brush" }, { id: "eraser", label: "Eraser" }]} value={mode} onChange={setMode} />
+            <div className={cx("no-scrollbar flex min-w-0 flex-1 items-center gap-2.5 overflow-x-auto py-1 pr-4 transition-opacity", !tintable && "pointer-events-none opacity-30")}>
+              <SwatchTool icon="block" label="No tint" active={!color} onClick={() => setColor(null)} size={28} />
+              <SwatchTool icon="pipette" label="Pick from the photo" active={picking} onClick={() => setPicking((p) => !p)} size={28} />
+              <SwatchTool icon="palette" label="Colour wheel" onClick={() => wheelRef.current?.click()} size={28} />
+              {picked && <ColorChip size={28} color={picked} selected={color === picked} onClick={() => setColor(picked)} />}
+              {palette && <ColorChip size={28} color={palette} selected={color === palette && palette !== picked} onClick={() => setColor(palette)} />}
+              {COLORS.map((c) => <ColorChip key={c} size={28} color={c} selected={color === c && c !== picked && c !== palette} onClick={() => setColor(c)} />)}
+            </div>
           </div>
-          {(mode !== "brush" || !colorUsable(item)) && <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)" }} />}
-        </div>
-        {/* list_item */}
-        <div className="no-scrollbar absolute inset-x-0 flex overflow-x-auto" style={{ top: 54 + 11 - 11, height: 69, padding: "0 4px" }}>
-          {ITEMS.map((it) => (
-            <button key={it.id} type="button" onClick={() => { setItem(it); setMode("brush"); }} className="relative flex flex-none items-center justify-center" style={{ width: 69, height: 69 }}>
-              <span className="relative overflow-hidden" style={{ width: 58, height: 58, borderRadius: 7, background: "#131314" }}>
-                {thumbs[it.id] && <img src={thumbs[it.id]} alt="" className="h-full w-full object-cover" draggable={false} />}
-                {item.id === it.id && <span className="absolute inset-0" style={{ borderRadius: 5, border: `2.5px solid ${PRIMARY}` }} />}
-              </span>
-            </button>
-          ))}
+          <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-4">
+            {ITEMS.map((it) => (
+              <ThumbItem key={it.id} size={58} label={it.name} src={thumbs[it.id]} selected={item.id === it.id && mode === "brush"} onClick={() => { setItem(it); setMode("brush"); }} />
+            ))}
+          </div>
         </div>
       </Panel>
     </>

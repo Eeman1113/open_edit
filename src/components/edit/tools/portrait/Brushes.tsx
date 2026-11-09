@@ -1,25 +1,27 @@
 "use client";
 
-// Pixel-based Portrait brush tools that don't need face tracking:
-//  - Manual Skin (EPSkinRetouchFragment): paint retouch effects with Opacity / blemish dot sizes / tone rows
-//  - Paint (EPPaintFragment): Skin Tone / Tint / Glitter colour brushes with an eraser
-// Native Kuru brush shaders are approximated with canvas filters (see effects per key below).
+// Brush pages under Portrait that work on pixels (no face tracking):
+//  - Retouch brush: paint retouch effects where you want them, with per-item opacity, spot sizes and tone sliders.
+//  - Colour brush: paint skin tone, tint or glitter, with an eraser.
+// The effects are approximated with canvas filters (see skinEffect below).
 import { useMemo, useRef, useState } from "react";
+import { Tabs, cx } from "@/components/ui";
 import { useEdit } from "../../ctx";
-import { ControlRow, EditSeekBar, Tint, featureColor } from "../../ui";
+import { ChipRow, ControlRow, EditSeekBar, FeatureButton, SwatchTool, ToolChip } from "../../ui";
+import { ToneRows } from "../../panels/Portrait";
 import {
-  BrushRing, copyCanvas, lerp, MENU, newCanvas, OptionRow, paintThrough, Panel, PhotoOverlay, sampleHex, strokeMask, TextTooltip,
+  BrushRing, copyCanvas, lerp, MENU, newCanvas, OPTION_H, OptionRow, paintThrough, Panel, PhotoOverlay, sampleHex, strokeMask, TextTooltip,
   useBake, useHold, usePhotoArea, useStrokeCanvas, useStrokeInput, useStrokes, useTimedTooltip, type MStroke, usePhotoSnapshot } from "../common";
 import { blurCanvas, filtered, mix } from "../effects";
 
-/* ================================================================== Manual Skin */
+/* ================================================================== Retouch brush */
 
 const SKIN_ITEMS: [string, string][] = [
-  ["auto", "One touch"], ["blemish", "Blemish"], ["smooth", "Skin"], ["balance", "Pore"], ["conceal", "Conceal"], ["wrinkle", "Wrinkles"],
-  ["smoother", "Smoother"], ["oilremover", "Matte"], ["skintexture", "Texture"], ["cleanse", "Cleanse"], ["skintoneup", "Brighten"],
-  ["vibrance", "Vibrance"], ["glow", "Glow"], ["cooldown", "Cool Down"], ["fixtone", "Fix Tone"], ["blackandwhite", "B&W"],
-  ["fixshadow", "Fix Shadow"], ["antiglare", "Anti Glare"], ["details", "Details"], ["clear", "Clarity"], ["teeth", "Whiten"],
-  ["structure", "Structure"], ["clarity", "Details"], ["eyebag", "Eye bags"], ["plim", "Eye Smile"],
+  ["auto", "Quick fix"], ["blemish", "Spots"], ["smooth", "Smooth"], ["balance", "Pores"], ["conceal", "Conceal"], ["wrinkle", "Lines"],
+  ["smoother", "Extra smooth"], ["oilremover", "Shine"], ["skintexture", "Texture"], ["cleanse", "Clean up"], ["skintoneup", "Skin tone"],
+  ["vibrance", "Vibrance"], ["glow", "Glow"], ["cooldown", "Cool down"], ["fixtone", "Even tone"], ["blackandwhite", "Mono"],
+  ["fixshadow", "Lift shadows"], ["antiglare", "Less glare"], ["details", "Fine detail"], ["clear", "Clarity"], ["teeth", "Teeth"],
+  ["structure", "Structure"], ["clarity", "Definition"], ["eyebag", "Under-eyes"], ["plim", "Eye smile"],
 ];
 const BLEMISH_SIZES = [{ d: 10, ring: 5 }, { d: 13, ring: 10 }, { d: 15, ring: 15 }, { d: 18, ring: 20 }, { d: 21, ring: 25 }];
 
@@ -68,42 +70,6 @@ function skinEffect(src: HTMLCanvasElement, key: string, tone: { cw: number; tl:
   }
 }
 
-function ToneRows({ cw, tl, set, bottom }: { cw: number; tl: number; set: (k: "cw" | "tl", v: number) => void; bottom: number }) {
-  const row = (k: "cw" | "tl", l: string, r: string, grad: string[], v: number, def: number) => (
-    <div className="flex items-center" style={{ height: 49 }}>
-      <span className="truncate text-white" style={{ marginLeft: 20, width: 50, fontSize: 13 }}>{l}</span>
-      <EditSeekBar style={{ margin: "0 24px" }} value={v} min={-1} max={1} def={def} gradient={grad} onChange={(x) => set(k, x)} />
-      <span className="truncate text-right text-white" style={{ marginRight: 20, width: 50, fontSize: 13 }}>{r}</span>
-    </div>
-  );
-  return (
-    <div className="absolute inset-x-0 z-20" style={{ bottom, height: 98, background: "rgba(0,0,0,0.4)" }} onPointerDown={(e) => e.stopPropagation()}>
-      {row("cw", "Cool", "Warm", ["#83CCFA", "#FFA68E"], cw, -0.2)}
-      {row("tl", "Tan", "Light", ["#9A6942", "#FFE5CE"], tl, 0.3)}
-    </div>
-  );
-}
-
-/** item_edit_photo_skin_retouch: icon 46 (marginLeft 6); selected expands a #333333 divider + eraser icon. */
-function ExpandItem({ icon, label, selected, eraser, onMain, onEraser }: { icon: string; label: string; selected: boolean; eraser: boolean; onMain: () => void; onEraser: () => void }) {
-  return (
-    <div className="relative flex flex-none items-start" style={{ minHeight: 58 }}>
-      <button type="button" onClick={onMain} className="flex flex-col items-center" style={{ width: 58 }}>
-        <Tint name={icon} size={46} color={featureColor(selected && !eraser)} />
-        <span className="w-full truncate text-center" style={{ fontSize: 10, lineHeight: "12px", color: featureColor(selected && !eraser) }}>{label}</span>
-      </button>
-      {selected && (
-        <>
-          <span className="flex-none" style={{ width: 1, height: 20, marginTop: 12, background: "#333333" }} />
-          <button type="button" onClick={onEraser} className="flex flex-col items-center" style={{ width: 58 }}>
-            <Tint name="icon_edit_tab_eraser" size={46} color={featureColor(eraser)} />
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
-
 export function ManualSkinPage() {
   const { openSub, toast } = useEdit();
   const area = usePhotoArea();
@@ -146,46 +112,55 @@ export function ManualSkinPage() {
   const pick = (k: string) => {
     setSel(k); setEraser(false);
     if (k === "auto") { strokes.push({ pts: [0, 0], r: 0, p: { key: "auto", full: true } }); return; }
-    setTip(k === "blemish" ? "Tap away any blemishes!" : "Drag to touch up!");
+    setTip(k === "blemish" ? "Tap each spot to clear it" : "Paint over the areas to touch up");
   };
-  const optionH = !sel || sel === "auto" ? 0 : sel === "skintoneup" ? 98 : 54;
+  const optionH = !sel || sel === "auto" ? 0 : sel === "skintoneup" ? 104 : OPTION_H;
   const last = strokes.visible[strokes.visible.length - 1];
 
   return (
     <>
       <PhotoOverlay area={area} canvasRef={canvasRef} hidden={held}><BrushRing at={ring} r={radiusPx} /></PhotoOverlay>
-      <TextTooltip text={tip} bottom={MENU + optionH + 54} />
+      <TextTooltip text={tip} bottom={MENU + optionH + 56} />
       <ControlRow
         bottom={MENU + optionH} style={{ zIndex: 20 }}
-        undo={{ can: strokes.undo.can, on: () => { if (last) toast(`Undo: ${label(last.p!.key as string)}`); strokes.undo.on(); } }}
+        undo={{ can: strokes.undo.can, on: () => { if (last) toast(`Undid ${label(last.p!.key as string)}`); strokes.undo.on(); } }}
         redo={{ can: strokes.redo.can, on: () => { strokes.redo.on(); } }}
         onOriginal={hold} originalEnabled={strokes.visible.length > 0}
       />
       {sel && sel !== "auto" && sel !== "blemish" && sel !== "skintoneup" && (
         <OptionRow bottom={MENU} label="Opacity">
-          <EditSeekBar style={{ marginLeft: 24, marginRight: 52 }} value={opacity[sel] ?? 1} min={0} max={1} def={1} onChange={(v) => setOpacity((o) => ({ ...o, [sel]: v }))} />
+          <EditSeekBar value={opacity[sel] ?? 1} min={0} max={1} def={1} onChange={(v) => setOpacity((o) => ({ ...o, [sel]: v }))} />
         </OptionRow>
       )}
       {sel === "blemish" && (
-        <OptionRow bottom={MENU} label="Size">
-          <div className="flex items-center" style={{ marginLeft: 28, gap: 14 }}>
+        <OptionRow bottom={MENU} label="Spot size">
+          <div className="flex flex-1 items-center justify-around">
             {BLEMISH_SIZES.map((b, i) => (
-              <button key={i} type="button" onClick={() => setBlemishSize(i)} className="flex items-center justify-center" style={{ width: 21, height: 21 }}>
-                <span className="rounded-full" style={{ width: b.d, height: b.d, background: blemishSize === i ? "#ffffff" : "rgba(255,255,255,0.3)" }} />
+              <button key={i} type="button" aria-label={`Size ${i + 1}`} aria-pressed={blemishSize === i} onClick={() => setBlemishSize(i)} className="flex h-9 w-9 items-center justify-center">
+                <span className={cx("rounded-full transition-colors", blemishSize === i ? "bg-accent" : "bg-fg-3")} style={{ width: b.d, height: b.d }} />
               </button>
             ))}
           </div>
         </OptionRow>
       )}
-      {sel === "skintoneup" && <ToneRows cw={tone.cw} tl={tone.tl} set={(k, v) => setTone((t) => ({ ...t, [k]: v }))} bottom={MENU} />}
-      <Panel title="Manual Skin" onClose={() => openSub(null)} onConfirm={() => {
+      {sel === "skintoneup" && (
+        <div className="absolute inset-x-3 z-20 flex flex-col justify-center rounded-lg bg-panel/90 py-2 shadow-lg ring-1 ring-line backdrop-blur-md" style={{ bottom: MENU + 8, height: 96 }} onPointerDown={(e) => e.stopPropagation()}>
+          <ToneRows cw={tone.cw} tl={tone.tl} defs={[-0.2, 0.3]} onChange={(k, v) => setTone((t) => ({ ...t, [k]: v }))} />
+        </div>
+      )}
+      <Panel title="Skin brush" onClose={() => openSub(null)} onConfirm={() => {
         if (!strokes.visible.length) { openSub(null); return; }
         bake((base) => { const out = copyCanvas(base); const g = out.getContext("2d")!; for (const s of strokes.visible) apply(g, s, out.width, out.height, base); return out; });
       }}>
-        <div className="no-scrollbar absolute inset-x-0 flex overflow-x-auto" style={{ top: 36, padding: "0 4px", gap: 6 }}>
-          {SKIN_ITEMS.map(([k, l]) => (
-            <ExpandItem key={k} icon={k === "auto" ? "beauty_icon_onetouch_off" : `beauty_icon_${k}`} label={l} selected={sel === k && k !== "auto"} eraser={eraser} onMain={() => pick(k)} onEraser={() => setEraser(true)} />
-          ))}
+        <div className="flex h-full flex-col justify-center gap-3">
+          <ChipRow>
+            {SKIN_ITEMS.map(([k, l]) => (
+              <ToolChip key={k} label={l} selected={sel === k && k !== "auto"} modified={strokes.visible.some((st) => st.p?.key === k)} onClick={() => pick(k)} />
+            ))}
+          </ChipRow>
+          <div className={cx("flex justify-center transition-opacity", (!sel || sel === "auto") && "pointer-events-none opacity-30")}>
+            <Tabs look="segment" className="w-[200px]" items={[{ id: "paint", label: "Paint" }, { id: "erase", label: "Erase" }]} value={eraser ? "erase" : "paint"} onChange={(v) => setEraser(v === "erase")} />
+          </div>
         </div>
       </Panel>
     </>
@@ -194,10 +169,15 @@ export function ManualSkinPage() {
 
 /* ================================================================== Paint */
 
+const hsl = (h: number, sat: number, l: number) => {
+  const k = (n: number) => (n + h / 30) % 12, a = sat * Math.min(l, 1 - l);
+  const f = (n: number) => Math.round((l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))) * 255).toString(16).padStart(2, "0");
+  return `#${f(0)}${f(8)}${f(4)}`.toUpperCase();
+};
 const PAINT = {
-  tone: { label: "Skin Tone", icon: "icon_edit_makeup_tone", colors: ["#F1D4C9", "#A1766E", "#331D1D", "#ECCFBA", "#D8B08A", "#34251F", "#F7E8DC", "#B8A89C", "#483F3D", "#E5C9CF", "#C9A6AE", "#5B4156", "#AFBDAA", "#6E7563", "#4F5645", "#FEFEFE", "#000000"] },
-  tint: { label: "Tint", icon: "icon_edit_makeup_tint", colors: ["#DD7768", "#BE3E31", "#753E3B", "#8A333C", "#511E27", "#E6ABB1", "#E08EA5", "#C34E6B", "#BC4E97", "#DC7846", "#DF8259", "#E0904B", "#E3A653", "#DEBB5F", "#ECC47E", "#EDCB60", "#F4DDA9", "#F6E589", "#FBF4BE", "#BA9173", "#8E5238", "#94655B", "#61352A", "#385798", "#8A8FD3", "#9BC3F4", "#C5FADE", "#95EB94", "#639E6E", "#395E3F", "#758C48", "#E5E5E5", "#B3B3B3", "#7F7F7F", "#4B4B4B"] },
-  glitter: { label: "Glitter", icon: "icon_edit_makeup_glitter", colors: ["#E7AAB1", "#E08EA5", "#FFFFFF", "#F0D9C9", "#F2D5DA", "#D3A0A9", "#BCA7F2", "#AC9BD2", "#9987ED", "#9BC3F4", "#AFC3F5", "#7FC6D8", "#C8FADF", "#92E9BF", "#B6F7BF", "#95EB94", "#FCF5BE", "#F6E589", "#EEC666", "#F4DDA9", "#ECC47E", "#E5E5E5"] },
+  tone: { label: "Skin", icon: "skin-tone", colors: [0.9, 0.82, 0.72, 0.62, 0.5, 0.38, 0.26, 0.16].flatMap((l) => [hsl(24, 0.45, l), hsl(14, 0.35, l)]) },
+  tint: { label: "Tint", icon: "palette", colors: [...[0, 12, 24, 36, 48, 90, 140, 180, 210, 240, 280, 320, 345].flatMap((h) => [hsl(h, 0.7, 0.6), hsl(h, 0.6, 0.4)]), "#E6E6E6", "#808080", "#404040"] },
+  glitter: { label: "Glitter", icon: "sparkles", colors: ["#FFFFFF", ...[0, 20, 45, 60, 120, 170, 200, 230, 265, 300, 330].map((h) => hsl(h, 0.8, 0.82))] },
 } as const;
 type PaintKind = keyof typeof PAINT;
 
@@ -253,54 +233,36 @@ export function PaintPage() {
     return { pts: [u, vv], r: rPx / Math.max(1, area.w), erase: eraser, p: { kind, color: v.color, opacity: v.opacity } };
   }, setLive, (s) => strokes.push(s), setRing);
 
-  const item = (k: PaintKind, pos: React.CSSProperties) => {
-    const selected = kind === k;
-    return (
-      <div className="absolute flex items-start" style={{ top: 36, ...pos }}>
-        <button type="button" onClick={() => { setKind(k); setEraser(false); }} className="flex flex-col items-center" style={{ width: 58 }}>
-          <Tint name={PAINT[k].icon} size={46} color={featureColor(selected && !eraser)} />
-          <span className="w-full truncate text-center" style={{ fontSize: 10, lineHeight: "12px", color: featureColor(selected && !eraser) }}>{PAINT[k].label}</span>
-        </button>
-        {selected && (
-          <>
-            <span style={{ width: 1, height: 20, marginTop: 12, background: "#333333" }} />
-            <button type="button" onClick={() => setEraser(true)} style={{ width: 58 }}><Tint name="icon_edit_tab_eraser" size={46} color={featureColor(eraser)} /></button>
-          </>
-        )}
-      </div>
-    );
-  };
-
   return (
     <>
       <PhotoOverlay area={area} canvasRef={canvasRef} hidden={held}><BrushRing at={ring} r={rPx} /></PhotoOverlay>
-      {/* colour column at the right edge of the preview */}
-      <div className="absolute right-0 z-20 flex flex-col items-center" style={{ top: 26, bottom: MENU + 54 + 54 + 31 }} onPointerDown={(e) => e.stopPropagation()}>
-        <div className="no-scrollbar flex flex-1 flex-col overflow-y-auto" style={{ maskImage: "linear-gradient(transparent, #000 16px, #000 calc(100% - 16px), transparent)" }}>
+      {/* colour rail at the right edge of the preview */}
+      <div className="absolute right-2 z-20 flex flex-col items-center gap-2 rounded-full bg-glass p-1.5 backdrop-blur-md" style={{ top: 64, bottom: MENU + OPTION_H + 60 }} onPointerDown={(e) => e.stopPropagation()}>
+        <div className="no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-1" style={{ maskImage: "linear-gradient(transparent, #000 12px, #000 calc(100% - 12px), transparent)" }}>
           {PAINT[kind].colors.map((c) => (
-            <button key={c} type="button" onClick={() => setVals((o) => ({ ...o, [kind]: { ...o[kind], color: c } }))} className="relative flex-none rounded-full" style={{ width: 36, height: 36, margin: "5px 10px", background: c, boxShadow: v.color === c ? "0 0 0 2px #ffffff" : "inset 0 0 0 1px rgba(255,255,255,0.2)" }} />
+            <button key={c} type="button" aria-label={c} aria-pressed={v.color === c} onClick={() => setVals((o) => ({ ...o, [kind]: { ...o[kind], color: c } }))}
+              className="h-8 w-8 flex-none rounded-full" style={{ background: c, boxShadow: v.color === c ? "0 0 0 2px var(--oe-bg), 0 0 0 4px var(--oe-fg)" : "inset 0 0 0 1px rgba(255,255,255,0.2)" }} />
           ))}
         </div>
-        <button type="button" onClick={() => setPicking((p) => !p)} className="flex flex-none items-center justify-center rounded-full bg-white" style={{ width: 36, height: 36, marginTop: 10, opacity: picking ? 0.6 : 1 }}>
-          <Tint name="icon_edit_color_picker" size={36} color="#222222" />
-        </button>
+        <SwatchTool icon="pipette" label="Pick from the photo" active={picking} onClick={() => setPicking((p) => !p)} size={32} />
       </div>
-      <ControlRow bottom={MENU + 54} style={{ zIndex: 20 }} undo={strokes.undo} redo={strokes.redo} onOriginal={hold} originalEnabled={strokes.visible.length > 0} />
-      <OptionRow bottom={MENU} bg="rgba(0,0,0,0.37)">
-        {(["opacity", "size"] as const).map((t) => (
-          <button key={t} type="button" onClick={() => setTab(t)} className="flex-none" style={{ marginLeft: 20, fontSize: 13, color: tab === t ? "#ffffff" : "rgba(255,255,255,0.4)" }}>{t === "opacity" ? "Opacity" : "Size"}</button>
-        ))}
-        <EditSeekBar style={{ marginLeft: 24, marginRight: 52 }} value={v[tab]} min={tab === "size" ? 0.01 : 0} max={1} def={tab === "size" ? 0.5 : 0.8} onChange={(x) => setVals((o) => ({ ...o, [kind]: { ...o[kind], [tab]: x } }))} />
+      <ControlRow bottom={MENU + OPTION_H} style={{ zIndex: 20 }} undo={strokes.undo} redo={strokes.redo} onOriginal={hold} originalEnabled={strokes.visible.length > 0} />
+      <OptionRow bottom={MENU}>
+        <Tabs look="segment" className="w-[140px] flex-none" items={[{ id: "opacity", label: "Opacity" }, { id: "size", label: "Size" }]} value={tab} onChange={setTab} />
+        <EditSeekBar value={v[tab]} min={tab === "size" ? 0.01 : 0} max={1} def={tab === "size" ? 0.5 : 0.8} onChange={(x) => setVals((o) => ({ ...o, [kind]: { ...o[kind], [tab]: x } }))} />
       </OptionRow>
-      <Panel title="Paint" onClose={() => openSub(null)} onConfirm={() => {
+      <Panel title="Colour" onClose={() => openSub(null)} onConfirm={() => {
         if (!strokes.visible.length) { openSub(null); return; }
         bake((base) => { const out = copyCanvas(base); const g = out.getContext("2d")!; for (const s of strokes.visible) paintStroke(g, s, out.width, out.height, base); return out; });
       }}>
-        {item("tone", { left: 20 })}
-        {item("tint", { left: "50%", transform: "translateX(-29px)" })}
-        {item("glitter", { right: 20 })}
+        <div className="flex h-full items-center justify-center gap-2">
+          {(Object.keys(PAINT) as PaintKind[]).map((k) => (
+            <FeatureButton key={k} icon={PAINT[k].icon} label={PAINT[k].label} selected={kind === k && !eraser} onClick={() => { setKind(k); setEraser(false); }} />
+          ))}
+          <span className="mx-2 h-10 w-px bg-line" />
+          <FeatureButton icon="remove" label="Erase" selected={eraser} onClick={() => setEraser(true)} />
+        </div>
       </Panel>
     </>
   );
 }
-

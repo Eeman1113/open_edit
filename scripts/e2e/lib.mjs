@@ -2,11 +2,12 @@
 // 390×844 @2x mobile viewport, fake camera from a y4m. Every step clicks/drags like a user, asserts on the DOM,
 // collects console errors / page exceptions / failed requests, and screenshots. Chrome is always killed on exit.
 import { spawn, execSync } from "node:child_process";
+import os from "node:os";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import path from "node:path";
 
-export const BASE_URL = process.env.E2E_BASE ?? "http://localhost:3612";
-export const SCRATCH = process.env.E2E_SCRATCH ?? "/private/tmp/claude-501/-Users-eemanmajumder-code-shit-b612/e9a81868-6760-4d59-9d00-16c14b2b3398/scratchpad";
+export const BASE_URL = process.env.E2E_BASE ?? "http://localhost:3700";
+export const SCRATCH = process.env.E2E_SCRATCH ?? path.join(os.tmpdir(), "open_edit-e2e");
 export const OUT = process.env.E2E_OUT ?? path.join(SCRATCH, "proof/e2e");
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -18,6 +19,7 @@ const IGNORE = [
 ];
 
 export async function launch({ y4m } = {}) {
+  mkdirSync(SCRATCH, { recursive: true });
   const prof = mkdtempSync(path.join(SCRATCH, "e2e-prof-"));
   const port = 9400 + Math.floor(Math.random() * 400);
   const args = [
@@ -217,11 +219,11 @@ export class Session {
   }
 
   // ---------- visual checks ----------
-  // flags raw Android #AARRGGBB leaking into inline styles, text overflowing its box, and broken images
+  // flags invisible (fully transparent) text, text overflowing the screen, and broken images
   async visualAudit() {
     return this.ev(`(() => {
       const out = [];
-      // un-converted Android #AARRGGBB shows up as (nearly) transparent text: flag visible text with alpha ≈ 0
+      // visible text with alpha ≈ 0 (a bad colour value) is flagged
       for (const el of document.querySelectorAll('body *')) {
         if ([...el.childNodes].every(n => n.nodeType !== 3 || !n.textContent.trim())) continue;
         const r = el.getBoundingClientRect(); if (r.width < 1 || r.bottom < 0 || r.top > innerHeight) continue;

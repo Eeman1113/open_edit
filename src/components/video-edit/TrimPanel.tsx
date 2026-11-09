@@ -1,14 +1,12 @@
 "use client";
 
-// Trim tab (VideoEditTabType.VideoEdit, group video_edit_group): frame_recyclerview (54dp cells, VideoFrameAdapter),
-// VideoSectionView (edit_handle_left / _right, #000 alpha 204 outside the section), VideoTimeBarView
-// (edit_video_pointer, 72dp) and duration_textview (11dp, right-aligned to the right handle).
+// Trim tab: a strip of frames with two accent handles that set the start and end, a playhead, and the length of the
+// kept section. Clips longer than five minutes scroll under the handles.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { d } from "@/components/ui/legacy-drawable";
 import { FRAME, MAX_MS, MIN_MS, fmtDuration } from "./model";
 
-const HANDLE_W = 16; // edit_handle_left: 48px @3x
-const CELLS = 5;
+const HANDLE_W = 16;
+const CELLS = 6;
 
 interface Props {
   url: string;
@@ -19,21 +17,21 @@ interface Props {
   end: number;
   pos: number;
   speed: number;
-  /** Top of the strip (px from the top of the screen area). */
-  top: number;
+  /** Bottom of the panel (px from the bottom of the editor). */
+  bottom: number;
   onStart: () => void;
   onMove: (start: number, end: number, edge: "L" | "R") => void;
   onEnd: (start: number, end: number) => void;
   onScrub?: (ms: number) => void;
 }
 
-/** C14816a.m61362a: below 5 min the strip is exactly five cells; above, each cell is 1 min and the list scrolls. */
+/** Up to 5 min the strip is exactly CELLS frames wide; longer clips get one frame per 5 min / CELLS and scroll. */
 function frameDuration(duration: number, speed: number) {
   return duration < MAX_MS * speed ? duration / CELLS : (MAX_MS * speed) / CELLS;
 }
 
-export function TrimPanel({ url, width, duration, start, end, pos, speed, top, onStart, onMove, onEnd }: Props) {
-  const pad = Math.max(HANDLE_W, (width - FRAME * CELLS) / 2); // VideoSectionHandler.m61239C
+export function TrimPanel({ url, width, duration, start, end, pos, speed, bottom, onStart, onMove, onEnd }: Props) {
+  const pad = Math.max(HANDLE_W + 4, (width - FRAME * CELLS) / 2);
   const fd = frameDuration(duration, speed);
   const count = Math.ceil(duration / fd - 1e-6);
   const pxPerMs = FRAME / fd;
@@ -42,11 +40,11 @@ export function TrimPanel({ url, width, duration, start, end, pos, speed, top, o
   const scrollMs = scroll / pxPerMs;
   const xOf = (ms: number) => pad + (ms - scrollMs) * pxPerMs;
   const msOf = (x: number) => scrollMs + (x - pad) / pxPerMs;
-  const maxRight = pad + FRAME * CELLS; // setMaxRightX
+  const maxRight = pad + FRAME * CELLS;
   const leftX = xOf(start), rightX = Math.min(xOf(end), maxRight, pad + (duration - scrollMs) * pxPerMs);
-  const minGap = Math.ceil(MIN_MS * speed * pxPerMs); // setBarGap
+  const minGap = Math.ceil(MIN_MS * speed * pxPerMs);
 
-  // thumbnails (VideoFrameAdapter / Glide video frames)
+  // frame thumbnails
   const [thumbs, setThumbs] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
@@ -69,7 +67,7 @@ export function TrimPanel({ url, width, duration, start, end, pos, speed, top, o
     return () => { alive = false; v.removeAttribute("src"); v.load(); };
   }, [url, count, fd, duration]);
 
-  // handle drag (VideoSectionView.onTouchEvent: 20dp / 10dp slop around each handle)
+  // handle drag (a 20 px slop around each handle)
   const drag = useRef<{ edge: "L" | "R" } | null>(null);
   const clampL = (x: number) => Math.max(pad, Math.min(x, rightX - minGap));
   const clampR = (x: number) => Math.min(maxRight, pad + (duration - scrollMs) * pxPerMs, Math.max(x, leftX + minGap));
@@ -78,7 +76,7 @@ export function TrimPanel({ url, width, duration, start, end, pos, speed, top, o
     return [start, Math.min(duration, msOf(clampR(x)))];
   };
 
-  // VideoTimeBarView pointer
+  // playhead
   const pointerX = end > start ? leftX + ((pos - start) / (end - start)) * (rightX - leftX) : leftX;
   const durText = fmtDuration((end - start) / speed);
 
@@ -88,32 +86,35 @@ export function TrimPanel({ url, width, duration, start, end, pos, speed, top, o
   }), [count, fd, duration]);
 
   return (
-    <div className="absolute inset-x-0" style={{ top: top - 30, height: 30 + FRAME + 9 }}>
-      {/* duration_textview: 11dp, gravity right, marginBottom 8, paddingRight = W − rightBarX − handle */}
-      <div className="absolute inset-x-0 text-right text-white" style={{ top: 30 - 8 - 13, fontSize: 11, lineHeight: "13px", paddingRight: Math.max(0, width - rightX - HANDLE_W) }}>{durText}</div>
-      {/* frame_recyclerview */}
+    <div className="absolute inset-x-0 z-20" style={{ bottom, height: 140 }}>
+      <div className="absolute inset-x-0 top-3 flex items-center justify-between px-5 text-[12px]">
+        <span className="font-medium text-fg-3">Drag the ends to trim</span>
+        <span className="tabular rounded-full bg-raised px-2.5 py-1 font-semibold text-fg">{durText}</span>
+      </div>
+      {/* frames */}
       <div
         ref={listRef}
-        className="no-scrollbar absolute inset-x-0 flex overflow-x-auto bg-black"
-        style={{ top: 30, height: FRAME, paddingLeft: pad, paddingRight: pad, overflowX: count > CELLS ? "auto" : "hidden" }}
+        className="no-scrollbar absolute inset-x-0 flex"
+        style={{ top: 50, height: FRAME, paddingLeft: pad, paddingRight: pad, overflowX: count > CELLS ? "auto" : "hidden" }}
         onScroll={(e) => {
-          const s = e.currentTarget.scrollLeft;
-          setScroll(s);
-          // scrolling moves the section (length kept)
-          const ns = s / pxPerMs + (leftX - pad) / pxPerMs;
+          const sc = e.currentTarget.scrollLeft;
+          setScroll(sc);
+          // scrolling moves the section (its length is kept)
+          const ns = sc / pxPerMs + (leftX - pad) / pxPerMs;
           onMove(ns, ns + (end - start), "L");
         }}
       >
-        {cells.map((c) => (
-          <div key={c.i} className="flex-none overflow-hidden bg-[#111]" style={{ width: c.w, height: FRAME }}>
+        {cells.map((c, i) => (
+          <div key={c.i} className="flex-none overflow-hidden bg-raised" style={{ width: c.w, height: FRAME, borderTopLeftRadius: i === 0 ? 8 : 0, borderBottomLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === cells.length - 1 ? 8 : 0, borderBottomRightRadius: i === cells.length - 1 ? 8 : 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             {thumbs[c.i] && <img src={thumbs[c.i]} alt="" draggable={false} style={{ width: FRAME, height: FRAME, objectFit: "cover", maxWidth: "none" }} />}
           </div>
         ))}
       </div>
-      {/* VideoSectionView */}
+      {/* section and handles */}
       <div
         className="absolute inset-x-0 touch-none"
-        style={{ top: 30, height: FRAME }}
+        style={{ top: 50, height: FRAME }}
         onPointerDown={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - r.left;
@@ -129,25 +130,33 @@ export function TrimPanel({ url, width, duration, start, end, pos, speed, top, o
         onPointerMove={(e) => {
           if (!drag.current) return;
           const r = e.currentTarget.getBoundingClientRect();
-          const [s, en] = toTimes(drag.current.edge, e.clientX - r.left);
-          onMove(s, en, drag.current.edge);
+          const [st, en] = toTimes(drag.current.edge, e.clientX - r.left);
+          onMove(st, en, drag.current.edge);
         }}
         onPointerUp={(e) => {
           if (!drag.current) return;
           const r = e.currentTarget.getBoundingClientRect();
-          const [s, en] = toTimes(drag.current.edge, e.clientX - r.left);
+          const [st, en] = toTimes(drag.current.edge, e.clientX - r.left);
           drag.current = null;
-          onEnd(s, en);
+          onEnd(st, en);
         }}
         onPointerCancel={() => { drag.current = null; onEnd(start, end); }}
       >
-        <div className="pointer-events-none absolute inset-y-0" style={{ left: pad - HANDLE_W, width: Math.max(0, leftX - pad + HANDLE_W), background: "rgba(0,0,0,0.8)" }} />
-        <div className="pointer-events-none absolute inset-y-0" style={{ left: rightX, right: pad - HANDLE_W, background: "rgba(0,0,0,0.8)" }} />
-        <img src={d("edit_handle_left")} alt="" draggable={false} className="pointer-events-none absolute" style={{ left: leftX - HANDLE_W, top: 0, width: HANDLE_W, height: FRAME }} />
-        <img src={d("edit_handle_right")} alt="" draggable={false} className="pointer-events-none absolute" style={{ left: rightX, top: 0, width: HANDLE_W, height: FRAME }} />
+        <div className="pointer-events-none absolute inset-y-0 bg-bg/75" style={{ left: pad - HANDLE_W, width: Math.max(0, leftX - pad + HANDLE_W) }} />
+        <div className="pointer-events-none absolute inset-y-0 bg-bg/75" style={{ left: rightX, right: pad - HANDLE_W }} />
+        <div className="pointer-events-none absolute inset-y-0 border-y-[3px] border-accent" style={{ left: leftX, width: Math.max(0, rightX - leftX) }} />
+        {(["L", "R"] as const).map((edge) => (
+          <span
+            key={edge}
+            className="pointer-events-none absolute inset-y-0 flex items-center justify-center bg-accent"
+            style={{ left: edge === "L" ? leftX - HANDLE_W : rightX, width: HANDLE_W, borderRadius: edge === "L" ? "8px 0 0 8px" : "0 8px 8px 0" }}
+          >
+            <span className="h-5 w-[3px] rounded-full bg-on-accent/60" />
+          </span>
+        ))}
+        {/* playhead */}
+        <span className="pointer-events-none absolute -bottom-1.5 -top-1.5 w-[3px] -translate-x-1/2 rounded-full bg-white shadow-[0_0_4px_rgba(0,0,0,0.6)]" style={{ left: pointerX }} />
       </div>
-      {/* VideoTimeBarView: 72dp tall, centred on the strip */}
-      <img src={d("edit_video_pointer")} alt="" draggable={false} className="pointer-events-none absolute" style={{ left: pointerX - 5, top: 30 + FRAME / 2 - 36, width: 10, height: 72 }} />
     </div>
   );
 }

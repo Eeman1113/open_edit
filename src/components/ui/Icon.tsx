@@ -18,9 +18,10 @@ import {
   WandSparkles, WifiOff, X, Zap, ZapOff, ZoomIn, type LucideIcon,
 } from "lucide-react";
 import {
-  Brush, CircleDashed, CloudFog, Columns3, Diamond, Droplets, FlipVertical2, Gauge, Gem, Grip, Library, Merge, MoveHorizontal,
+  Brush, CircleDashed, CloudFog, Columns3, Diamond, Droplets, Gauge, Gem, Grip, Library, Merge, MoveHorizontal,
   MoveVertical, PaintRoller, PersonStanding, Replace, Rewind, Rotate3d, RotateCw, Rows3, Spline, SunDim, SunMedium, SwatchBook,
-  TextAlignCenter, TextAlignEnd, TextAlignStart, Thermometer, Triangle, Waves, Wind, Wrench,
+  TextAlignCenter, TextAlignEnd, TextAlignStart, Thermometer, Triangle, TrianglesCenterlineDashedHorizontal,
+  TrianglesCenterlineDashedVertical, Waves, Wind, Wrench,
 } from "lucide-react";
 import { useAssetPack } from "@/lib/assets";
 import { packIconUrl } from "./pack";
@@ -56,7 +57,7 @@ export const ICONS = {
   tools: Wrench, curves: Spline, "split-tone": SwatchBook, brightness: SunMedium, brilliance: Gem, contrast: Contrast,
   clarity: Diamond, saturation: Droplets, sharpen: Triangle, texture: Waves, highlights: SunDim, fade: CloudFog, grain: Grip,
   warmth: Thermometer, tint: Droplet, vignette: CircleDashed, "rotate-left": RotateCcw, "rotate-right": RotateCw,
-  "flip-v": FlipVertical2, "skew-h": MoveHorizontal, "skew-v": MoveVertical, "face-3d": Rotate3d, body: PersonStanding,
+  "flip-h": TrianglesCenterlineDashedVertical, "flip-v": TrianglesCenterlineDashedHorizontal, "skew-h": MoveHorizontal, "skew-v": MoveVertical, "face-3d": Rotate3d, body: PersonStanding,
   brush: Brush, paint: PaintRoller, "skin-tone": SwatchBook, wind: Wind, merge: Merge, library: Library,
   "align-left": TextAlignStart, "align-center": TextAlignCenter, "align-right": TextAlignEnd, speed: Gauge, reverse: Rewind,
   "stack-v": Rows3, "stack-h": Columns3, replace: Replace,

@@ -1,31 +1,109 @@
-# B612 Web
+# Open_Edit
 
-A one-to-one web port of the B612 Android camera app (v14.0.31), built with Next.js 16. The screens were reproduced from the decompiled APK: layouts, dimensions, colors, strings, drawables, filter LUTs and shaders.
+**A free, open-source camera and photo and video editor for the web.** Live filters, beauty and face effects,
+a full photo editor, a video editor, collage and on-device AI tools, all running in the browser. There are no
+accounts and no paywalls, and your photos never leave your device.
 
-```bash
-nvm use 24
+> Screenshots: _coming soon_ (camera · editor · AI tools · collage)
+
+## Features
+
+- **Camera**: live WebGL preview with 22 original colour looks, beauty (smoothing, brighten, skin tone, face
+  shape), makeup, AR effects tracked to your face (MediaPipe), timer, frames, bounce, collage capture, video with
+  multiple clips and a music track.
+- **Photo editor**: filters, adjustments (curves, HSL, split tone, clarity, grain…), crop and rotate, portrait
+  tools (reshape, makeup, retouch), text, brushes, stickers, borders, layers, undo and redo.
+- **Video editor**: trim, filters, effects, music and export.
+- **Collage**: layouts for 2 to 9 photos.
+- **AI tools on your device**: Enhance (Real-ESRGAN), Remove and Expand (MI-GAN), Depth blur (Depth Anything V2),
+  Cutout and Hair colour (MediaPipe), plus Art styles. Models are downloaded once and run with WebGPU or
+  multithreaded WebAssembly.
+- **Gallery**: stored in your browser (IndexedDB), with HEIC import.
+- **Content catalogues** (music, art styles, effects, templates, feeds): built in, or connected to your own
+  content service through the server API.
+
+## Quick start
+
+Requires Node.js 24.
+
+```sh
 npm install
-npm run dev   # http://localhost:3000 (camera needs localhost or https)
+npm run dev          # http://localhost:3000 (the camera needs localhost or https)
 ```
 
-## Screens
-| Route | Original | Notes |
-|---|---|---|
-| `/` | ActivityCamera | Live WebGL preview; 17 filters using the APK's real LUTs and lookup shader; ratios Full/9:16/3:4/1:1; timer; flash/screen flash; tap focus; swipe to change filter; pinch zoom; long-press video; confirm screen |
-| `/home`, `/discover`, `/ai`, `/my` | Bottom nav tabs | Home and Discover feeds come from static JSON in `src/data/` (the originals are server-driven) |
-| `/settings/**` | Camera settings, About, Account | Settings persist in localStorage under the original pref names |
-| `/gallery` | GalleryActivity | Photos are stored in IndexedDB. Import includes iPhone HEIC (converted with libheif) |
-| `/edit?id=` | EPActivity | Filters, Adjust (shaders recovered from the APK), Crop/rotate, Portrait (pixel-based items), Text, Brush, Border, Stickers, layers, undo/redo |
+Everything works out of the box: the built-in asset pack provides filters, effects, fonts, music, templates and
+demo content. No environment variables are required.
 
-## Where things come from
-- `public/drawable/`: APK drawables; vector XML converted to SVG by `scripts/convert-drawables.py`.
-- `public/lut/`, `public/kuru/`, `public/edit/`: the APK's `.dat` LUTs, which are byte-reversed PNGs.
-- `src/lib/filters.ts`: `LocalFilterType` ported one-to-one (front/back LUTs and strengths).
-- `src/lib/gl/`: the WebGL pipeline; the LUT shader is copied verbatim from the APK.
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Development server |
+| `npm run build` | Production build (standalone output) |
+| `npm start` | Serve the production build (`.next/standalone/server.js`) |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript (`tsc --noEmit`) |
+| `npm run audit` | Provenance audit and dependency licence check |
+| `npm run gen:assets` | Regenerate the built-in asset pack (`scripts/gen-*.mjs`, needs ffmpeg for media) |
+| `npm run e2e` | End-to-end flows in headless Chrome against a running server (`E2E_BASE`, default `http://localhost:3700`) |
 
-## Not reproducible on the web
-- **Native face engine:** AR effects/stickers, face-shape beauty and makeup run in proprietary native libraries (`libkuru`, SenseTime).
-- **Script filters:** "HD" and "No Filter" are encrypted Kuru scripts and are approximated here.
-- **Server-backed features:** AI tools, effect/sticker/font catalogs, login and the server feeds. Their UI shells are present with empty or unavailable states.
+## Configuration
 
-There's no VIP tier: all content is unlocked for everyone.
+Copy `.env.example` to `.env.local` and set what you need. All variables are optional.
+
+- **Content providers**: `OE_CONTENT_API_URL` / `OE_CONTENT_API_KEY` connect every catalogue to one content
+  service; `OE_MUSIC_API_URL`, `OE_ARTSTYLE_API_URL`, `OE_LOOKS_API_URL`, `OE_STICKERS_API_URL`,
+  `OE_TEMPLATES_API_URL` and `OE_FEED_API_URL` (each with `_API_KEY`) override per catalogue. Keys stay on the
+  server: the browser only talks to this site's `/api/*` routes.
+- **Sessions and limits**: `OE_SESSION_SECRET`, `OE_RATE_LIMIT_PER_MINUTE`, `OE_TRUST_PROXY`.
+- **Build time**: `NEXT_PUBLIC_ASSET_PACK`, `NEXT_PUBLIC_BASE_PATH`, `OE_COEP`.
+
+See [docs/platform.md](docs/platform.md) for the API, the provider adapter interface and the privacy model.
+
+## Asset packs
+
+Every replaceable asset (icons, brand marks, filter tables, makeup and sticker art, brushes, collage layouts,
+fonts, music, demo content) is looked up by kind and id in an **asset pack** (`public/packs/<id>/manifest.json`).
+The built-in `open` pack contains only original or permissively licensed assets and is generated by the scripts in
+`scripts/`. To use your own pack, drop it in `public/packs/<id>/` and set `NEXT_PUBLIC_ASSET_PACK=<id>`; anything it
+does not provide falls back to the open pack. Packs other than `open` are git-ignored. See
+[docs/engine.md](docs/engine.md).
+
+## Architecture
+
+```
+src/app/             Next.js App Router pages and the /api/* route handlers
+src/server/          server-only code: env config, sessions, rate limit, content provider adapters
+src/components/      screens (camera, editor, video editor, collage, gallery, discover…) and the ui/ design system
+src/lib/             engines and helpers: gl/ (WebGL renderer), face/ (MediaPipe face engine), ai/ (ONNX tools),
+                     assets/ (asset packs), store (IndexedDB gallery), settings
+src/data/            plain-data catalogues (filters, makeup, art styles, demo feeds)
+public/packs/open/   the built-in asset pack
+public/models, ort,  model weights and runtimes for the on-device AI tools
+  mediapipe/
+scripts/             asset generators, provenance audit, licence report, e2e harness
+```
+
+- [docs/design.md](docs/design.md): design system and identity
+- [docs/engine.md](docs/engine.md): rendering, face engine, generated assets and asset packs
+- [docs/platform.md](docs/platform.md): server API, providers, sessions, privacy, security headers
+- [docs/deploy.md](docs/deploy.md): Node, Docker and Vercel
+
+## Deploy
+
+```sh
+docker compose up --build          # http://localhost:3000
+```
+
+Or deploy to Vercel with no configuration, or run the standalone Node server. Details in
+[docs/deploy.md](docs/deploy.md).
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: in short, keep everything original or
+permissively licensed, run `npm run typecheck`, `npm run lint` and `npm run audit` before opening a pull request,
+and follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in
+[SECURITY.md](SECURITY.md).
+
+## Licence
+
+Open_Edit is released under the [MIT licence](LICENSE). Third-party components (model weights, runtimes, fonts and
+npm packages) keep their own licences, listed with their obligations in [NOTICE.md](NOTICE.md).

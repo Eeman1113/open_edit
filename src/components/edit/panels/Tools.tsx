@@ -1,28 +1,35 @@
 "use client";
 
-// EPToolsFragment + EPCropFragment (crop / rotate / perspective).
+// Tools tab and the Crop page (crop, rotate / straighten, perspective).
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "@/components/ui";
 import { useEdit } from "../ctx";
 import { CROP_RATIOS, TOOLS } from "../model";
-import { ControlRow, FeatureButton, FeatureList, Img, TitleBar, TitleTab } from "../ui";
+import { usePhotoSnapshot } from "../tools/common";
+import { BarTabs, ControlRow, Dock, EditBar, FeatureButton, FeatureList, MENU, PanelArea, TOP_H } from "../ui";
 
 export function ToolsPanel() {
-  const { undo, redo, setOriginal, openSub } = useEdit();
+  const { undo, setOriginal, openSub } = useEdit();
   return (
     <>
-      <ControlRow undo={undo} redo={redo} onOriginal={setOriginal} />
-      <div className="absolute inset-x-0" style={{ bottom: 52, height: 134 }}>
-        <FeatureList count={TOOLS.length}>
+      <ControlRow undo={undo} onOriginal={setOriginal} />
+      <PanelArea>
+        <FeatureList>
           {TOOLS.map((t) => (
-            <FeatureButton
-              key={t.key} icon={t.icon} label={t.label}
-              onClick={() => openSub(t.key === "crop" ? "crop" : `x:${t.key}`)}
-            />
+            <FeatureButton key={t.key} icon={t.icon} label={t.label} onClick={() => openSub(t.key === "crop" ? "crop" : `x:${t.key}`)} />
           ))}
         </FeatureList>
-      </div>
+      </PanelArea>
     </>
   );
+}
+
+/** Aspect-ratio glyph: a rounded box of the given ratio (dashed for free, a photo icon for the original). */
+export function RatioGlyph({ ratio, size = 24 }: { ratio: number | null; size?: number }) {
+  if (ratio === 0) return <Icon name="image" size={size - 2} />;
+  const r = ratio ?? 1;
+  const w = r >= 1 ? size : size * r, h = r >= 1 ? size / r : size;
+  return <span className="block rounded-[4px] border-2 border-current" style={{ width: Math.max(8, w), height: Math.max(8, h), borderStyle: ratio === null ? "dashed" : "solid" }} />;
 }
 
 /* ================================================================== geometry helpers */
@@ -56,7 +63,7 @@ const applyH = (h: number[], x: number, y: number): V => {
   return { x: (h[0] * x + h[1] * y + h[2]) / w, y: (h[3] * x + h[4] * y + h[5]) / w };
 };
 
-/** Skewed corner quad (TL, TR, BR, BL) in centred image-local coords (EPCropViewModel skew rules). */
+/** Tilted corner quad (TL, TR, BR, BL) in centred image-local coords: each tilt angle pushes one edge outwards. */
 function skewQuad(w: number, h: number, sh: number, sv: number): V[] {
   const q: V[] = [{ x: -w / 2, y: -h / 2 }, { x: w / 2, y: -h / 2 }, { x: w / 2, y: h / 2 }, { x: -w / 2, y: h / 2 }];
   if (sh) {
@@ -105,41 +112,38 @@ function drawWarped(ctx: CanvasRenderingContext2D, img: CanvasImageSource, w: nu
   }
 }
 
-/* ================================================================== EditAngleBar */
+/* ================================================================== angle ruler */
 
-function AngleBar({ value, onChange, onDrag }: { value: number; onChange: (v: number) => void; onDrag: (d: boolean) => void }) {
+/** −45°…+45° ruler with a tick every 5°; drag anywhere to set the angle, snaps to 0. */
+function AngleBar({ value, onChange, onDrag, label }: { value: number; onChange: (v: number) => void; onDrag: (d: boolean) => void; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState(false);
-  const [bubble, setBubble] = useState(false);
-  const t = useRef<number | undefined>(undefined);
   const p = (value + 45) / 90;
   const at = (x: number) => {
     const r = ref.current!.getBoundingClientRect();
     let q = Math.min(1, Math.max(0, (x - r.left) / r.width));
-    if (Math.abs(q - 0.5) < 0.005) q = 0.5;
+    if (Math.abs(q - 0.5) < 0.008) q = 0.5;
     return -45 + q * 90;
   };
   return (
-    <div className="absolute inset-x-0" style={{ bottom: 186, height: 54, padding: "19px 52px", background: "rgba(0,0,0,0.4)" }}>
+    <div className="absolute inset-x-3 z-20 rounded-lg bg-panel/90 px-4 pb-2 pt-1.5 shadow-lg ring-1 ring-line backdrop-blur-md" style={{ bottom: MENU + 8 }} onPointerDown={(e) => e.stopPropagation()}>
+      <div className="mb-1 flex items-center justify-between text-[12px]">
+        <span className="font-medium text-fg-2">{label}</span>
+        <span className="tabular font-display text-[14px] font-semibold text-fg">{`${value > 0 ? "+" : ""}${Math.round(value * 10) / 10}°`}</span>
+        <button type="button" onClick={() => onChange(0)} className="font-semibold text-accent disabled:text-fg-3" disabled={value === 0}>Reset</button>
+      </div>
       <div
         ref={ref}
-        className="relative h-full"
-        style={{ touchAction: "none" }}
-        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setDrag(true); setBubble(true); window.clearTimeout(t.current); onDrag(true); onChange(at(e.clientX)); }}
+        className="relative h-8 cursor-ew-resize touch-none"
+        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setDrag(true); onDrag(true); onChange(at(e.clientX)); }}
         onPointerMove={(e) => { if (drag) onChange(at(e.clientX)); }}
-        onPointerUp={() => { setDrag(false); onDrag(false); t.current = window.setTimeout(() => setBubble(false), 500); }}
+        onPointerUp={() => { setDrag(false); onDrag(false); }}
+        onPointerCancel={() => { setDrag(false); onDrag(false); }}
       >
-        <div className="absolute inset-x-0" style={{ top: 8, height: 2, background: "rgba(255,255,255,0.3)" }} />
-        {Array.from({ length: 9 }, (_, i) => (
-          <div key={i} className="absolute" style={{ left: `calc(${(i / 8) * 100}% - 1px)`, top: 2, width: 2, height: 12, borderRadius: 1, background: "rgba(255,255,255,0.3)" }} />
+        {Array.from({ length: 19 }, (_, i) => (
+          <span key={i} className="absolute top-1/2 w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: `${(i / 18) * 100}%`, height: i % 9 === 0 ? 18 : i % 3 === 0 ? 12 : 7, background: i === 9 ? "var(--oe-fg)" : "var(--oe-fg3)" }} />
         ))}
-        <div className="absolute bg-white" style={{ left: `calc(${p * 100}% - 1px)`, top: -2, width: 2, height: 20 }} />
-        <div
-          className="pointer-events-none absolute flex items-center justify-center rounded-full bg-white font-bold"
-          style={{ width: 42, height: 42, left: `calc(${p * 100}% - 21px)`, bottom: 16 + 10 + 2, fontSize: 11, color: "#222222", boxShadow: "0 0 2px rgba(0,0,0,0.3)", opacity: bubble ? 1 : 0, transition: bubble ? "none" : "opacity 300ms" }}
-        >
-          {`${Math.round(value * 10) / 10}˚`}
-        </div>
+        <span className="absolute top-0 h-full w-[3px] -translate-x-1/2 rounded-full bg-accent shadow-[0_0_0_2px_var(--oe-panel)]" style={{ left: `${p * 100}%` }} />
       </div>
     </div>
   );
@@ -151,10 +155,12 @@ interface Xf { s: number; t: V }
 type Page = "crop" | "rotate" | "skew";
 
 export function CropTool() {
-  const { doc, commit, openSub, bases, photoCanvas } = useEdit();
+  const { doc, commit, openSub, bases } = useEdit();
   const base = bases.current[doc.base];
   const bw = base.width, bh = base.height;
-  const [img] = useState(() => photoCanvas()?.toDataURL("image/jpeg", 0.92) ?? "");
+  // the filtered photo, captured once it has rendered
+  const snap = usePhotoSnapshot();
+  const img = useMemo(() => snap?.toDataURL("image/jpeg", 0.92) ?? "", [snap]);
   const boxRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ w: 0, h: 0 });
   const [page, setPage] = useState<Page>("crop");
@@ -371,11 +377,12 @@ export function CropTool() {
     <>
       <div
         ref={boxRef}
-        className="absolute inset-x-0 top-0 overflow-hidden"
-        style={{ bottom: 186, background: "#171717", touchAction: "none" }}
+        className="absolute inset-x-0 overflow-hidden bg-bg"
+        style={{ top: TOP_H, bottom: MENU, touchAction: "none" }}
         onPointerDown={(e) => onDown(e)} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onWheel={onWheel}
       >
         {img && fr && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={img} alt="" draggable={false}
             className="pointer-events-none absolute left-0 top-0 max-w-none"
@@ -384,12 +391,12 @@ export function CropTool() {
         )}
         {fr && (
           <>
-            {/* dim outside: #99171717 */}
-            <div className="pointer-events-none absolute" style={{ left: fr.x, top: fr.y, width: fr.w, height: fr.h, boxShadow: "0 0 0 9999px rgba(23,23,23,0.6)", border: "2px solid #ffffff", transition }}>
-              {grid > 0 && Array.from({ length: grid - 1 }, (_, i) => (
-                <div key={i}>
-                  <div className="absolute inset-y-0" style={{ left: `${((i + 1) / grid) * 100}%`, width: 1, background: "rgba(255,255,255,0.4)" }} />
-                  <div className="absolute inset-x-0" style={{ top: `${((i + 1) / grid) * 100}%`, height: 1, background: "rgba(255,255,255,0.4)" }} />
+            {/* everything outside the crop is dimmed */}
+            <div className="pointer-events-none absolute" style={{ left: fr.x, top: fr.y, width: fr.w, height: fr.h, boxShadow: "0 0 0 9999px rgba(11,12,15,0.68), inset 0 0 0 1.5px rgba(255,255,255,0.9)", transition }}>
+              {Array.from({ length: (grid || 3) - 1 }, (_, i) => (
+                <div key={i} style={{ opacity: grid ? 0.55 : 0.18, transition: "opacity 200ms" }}>
+                  <div className="absolute inset-y-0 bg-white" style={{ left: `${((i + 1) / (grid || 3)) * 100}%`, width: 1 }} />
+                  <div className="absolute inset-x-0 bg-white" style={{ top: `${((i + 1) / (grid || 3)) * 100}%`, height: 1 }} />
                 </div>
               ))}
             </div>
@@ -399,11 +406,13 @@ export function CropTool() {
                 <div
                   key={c}
                   className="absolute"
-                  style={{ left: x - 18, top: y - 18, width: 36, height: 36, touchAction: "none", transition }}
+                  style={{ left: x - 22, top: y - 22, width: 44, height: 44, touchAction: "none", transition }}
                   data-corner={c}
                   onPointerDown={onCornerDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
                 >
-                  <Img name="icon_edit_crop_corner" size={36} style={{ transform: `rotate(${c * 90}deg)` }} />
+                  <span className="absolute left-1/2 top-1/2 h-5 w-5" style={{ transform: `rotate(${c * 90}deg)`, transformOrigin: "0 0" }}>
+                    <span className="absolute -left-[2px] -top-[2px] h-5 w-5 rounded-tl-[3px] border-l-[4px] border-t-[4px] border-accent" />
+                  </span>
                 </div>
               );
             })}
@@ -411,43 +420,40 @@ export function CropTool() {
         )}
       </div>
 
-      {page === "rotate" && <AngleBar value={angle} onChange={setStraighten} onDrag={(dd) => setGrid(dd ? 6 : 0)} />}
+      {page === "rotate" && <AngleBar label="Straighten" value={angle} onChange={setStraighten} onDrag={(dd) => setGrid(dd ? 6 : 0)} />}
       {page === "skew" && (
         <AngleBar
+          label={skewAxis === "h" ? "Horizontal tilt" : "Vertical tilt"}
           value={skewAxis === "h" ? skewH : skewV}
           onChange={(v) => (skewAxis === "h" ? setSkewH(v) : setSkewV(v))}
           onDrag={(dd) => setGrid(dd ? 6 : 0)}
         />
       )}
 
-      <div className="absolute inset-x-0 bottom-0 bg-black" style={{ height: 186 }}>
-        <div className="absolute inset-x-0 top-0" style={{ height: 134 }}>
-          {page === "crop" && (
-            <FeatureList count={CROP_RATIOS.length}>
-              {CROP_RATIOS.map((r, i) => <FeatureButton key={r.label} icon={r.icon} label={r.label} selected={ratioIdx === i} onClick={() => pickRatio(i)} />)}
-            </FeatureList>
-          )}
-          {page === "rotate" && (
-            <div className="absolute inset-x-0 flex justify-center" style={{ top: 36, gap: 24 }}>
-              <FeatureButton icon="icon_edit_crop_rotate_left" label="Left 90°" onClick={() => rotate(3)} />
-              <FeatureButton icon="icon_edit_crop_rotate_right" label="Right 90°" onClick={() => rotate(1)} />
-              <FeatureButton icon="icon_edit_crop_vertical" label="Mirror" onClick={() => { setFx((v) => -v); }} />
-              <FeatureButton icon="icon_edit_crop_horizon" label="Flip" onClick={() => { setFy((v) => -v); }} />
-            </div>
-          )}
-          {page === "skew" && (
-            <div className="absolute inset-x-0 flex justify-center" style={{ top: 36, gap: 52 }}>
-              <FeatureButton icon="icon_edit_crop_bend_horizon" label="Horizontal" selected={skewAxis === "h"} onClick={() => setSkewAxis("h")} />
-              <FeatureButton icon="icon_edit_crop_bend_vertical" label="Vertical" selected={skewAxis === "v"} onClick={() => setSkewAxis("v")} />
-            </div>
-          )}
-        </div>
-        <TitleBar onClose={() => openSub(null)} onConfirm={confirm}>
-          {(["crop", "rotate", "skew"] as Page[]).map((pg) => (
-            <TitleTab key={pg} label={pg === "crop" ? "Crop" : pg === "rotate" ? "Rotate" : "Perspective"} selected={page === pg} onClick={() => setPage(pg)} style={{ padding: "10px 20px" }} />
-          ))}
-        </TitleBar>
-      </div>
+      <EditBar onClose={() => openSub(null)} onConfirm={confirm}>
+        <BarTabs items={[{ id: "crop", label: "Crop" }, { id: "rotate", label: "Rotate" }, { id: "skew", label: "Tilt" }]} value={page} onChange={(pg: Page) => setPage(pg)} />
+      </EditBar>
+      <Dock>
+        {page === "crop" && (
+          <FeatureList>
+            {CROP_RATIOS.map((r, i) => <FeatureButton key={r.label} iconNode={<RatioGlyph ratio={r.ratio} />} label={r.label} selected={ratioIdx === i} onClick={() => pickRatio(i)} />)}
+          </FeatureList>
+        )}
+        {page === "rotate" && (
+          <FeatureList>
+            <FeatureButton icon="rotate-left" label="Rotate left" onClick={() => rotate(3)} />
+            <FeatureButton icon="rotate-right" label="Rotate right" onClick={() => rotate(1)} />
+            <FeatureButton icon="flip-h" label="Flip across" selected={fx < 0} onClick={() => { setFx((v) => -v); }} />
+            <FeatureButton icon="flip-v" label="Flip upright" selected={fy < 0} onClick={() => { setFy((v) => -v); }} />
+          </FeatureList>
+        )}
+        {page === "skew" && (
+          <FeatureList>
+            <FeatureButton icon="skew-h" label="Horizontal" selected={skewAxis === "h"} modified={!!skewH} onClick={() => setSkewAxis("h")} />
+            <FeatureButton icon="skew-v" label="Vertical" selected={skewAxis === "v"} modified={!!skewV} onClick={() => setSkewAxis("v")} />
+          </FeatureList>
+        )}
+      </Dock>
     </>
   );
 }

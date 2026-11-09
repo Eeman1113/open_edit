@@ -71,11 +71,11 @@ export const FONTS = [
   ...packFonts().map((f) => ({ id: f.id, label: f.label, css: fontStack(f.id) })),
 ];
 
-/* ------------------------------------------------------------------ text raster (bjh/skr text model) */
+/* ------------------------------------------------------------------ text raster */
 
-const TEXT_PX = 160; // raster font size; base font size is 24dp
+const TEXT_PX = 160; // raster font size; layout sizes below are in units of 1/24 of it
 export function rasterText(st: TextStyle): HTMLCanvasElement {
-  const unit = TEXT_PX / 24; // px per dp
+  const unit = TEXT_PX / 24; // layout unit
   const font = `${TEXT_PX}px ${FONTS.find((f) => f.id === st.font)?.css ?? FONTS[0].css}`;
   const c = document.createElement("canvas");
   const ctx = c.getContext("2d")!;
@@ -173,7 +173,7 @@ function tintedTexture(img: HTMLImageElement, name: string, color: string) {
 }
 
 /**
- * Stamp a texture along the stroke path (KuruBrushWrapperNode: one dab every `interval * size`, rotated along the
+ * Stamp a texture along the stroke path (one dab every `interval * size`, rotated along the
  * path when useDirection). Dabs are drawn opaque into a scratch canvas so overlaps inside one stroke don't build up,
  * then the stroke is composited once.
  */
@@ -235,7 +235,7 @@ export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[], w:
   for (const s of strokes) {
     if (s.pts.length < 2) continue;
     if (s.tex && s.kind !== "eraser" && s.kind !== "restore") {
-      // Kuru texture brushes: COLOR / HIGHLIGHTER (one 50% layer, no build-up) / OUTLINE (outline mask in the picked colour,
+      // textured brushes: COLOR / HIGHLIGHTER (one 50% layer, no build-up) / OUTLINE (outline mask in the picked colour,
       // inner mask in the inner colour on top) / STAMP-like dashes
       let done: boolean;
       if (s.kind === "outline") {
@@ -281,31 +281,15 @@ export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[], w:
   }
 }
 
-/* ------------------------------------------------------------------ layer adjust (JS port of image_detail math) */
+/* ------------------------------------------------------------------ layer adjust */
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-function sig(value: number, strength: number) {
-  value = clamp01(value);
-  const t = 1 / (1 - strength);
-  return value > 0.5 ? 1 - Math.pow(2 - 2 * value, t) * 0.5 : Math.pow(2 * value, t) * 0.5;
-}
-const bow = (x: number, mag: number) => { let p = 1 + Math.abs(mag); if (mag < 0) p = 1 / p; return 1 - Math.pow(clamp01(1 - x), p); };
-const getBow = (sg: number, v: number) => (sg > 0 ? Math.pow(v, 0.6) : Math.pow(v, 1.8));
-const pBow = (v: number, mag: number) => { let p = 1 + Math.abs(mag); if (mag > 0) p = 1 / p; return Math.pow(v, p); };
-const shadowsAdj = (l: number, b: number, a: number) => { l = clamp01(l); const dv = getBow(a, l), bv = a > 0 ? pBow(l, 0.1) : pBow(l, -0.1); return l + (dv + (bv - dv) * b - l) * Math.abs(a); };
-const highAdj = (l: number, b: number, a: number) => { l = clamp01(l); const bv = 1 - getBow(-a, 1 - l), dv = a < 0 ? 1 - pBow(1 - l, 0.1) : 1 - pBow(1 - l, -0.1); return l + (dv + (bv - dv) * b - l) * Math.abs(a); };
 
-function rgb2hsv(r: number, g: number, b: number): [number, number, number] {
-  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
-  let h = 0;
-  if (d > 0) h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  return [h / 6, mx === 0 ? 0 : d / mx, mx];
-}
-function hsv2rgb(h: number, s: number, v: number): [number, number, number] {
-  const f = (n: number) => { const k = (n + h * 6) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
-  return [f(5), f(3), f(1)];
-}
-
+/**
+ * Per-layer adjustments (stickers, text, drawings), applied to the layer's pixels in this order: sharpen (unsharp
+ * mask), highlights / shadows (driven by a blurred luminance so edges keep their contrast), tint (green ↔ magenta),
+ * saturation (distance from luma), contrast (around mid grey), brightness (a gamma curve) and warmth (red ↔ blue).
+ */
 export function adjustImage(c: HTMLCanvasElement, a: LayerAdjust) {
   const on = (Object.values(a) as number[]).some((v) => Math.abs(v) > 0.005);
   if (!on) return;
@@ -319,38 +303,29 @@ export function adjustImage(c: HTMLCanvasElement, a: LayerAdjust) {
     tc.drawImage(c, 0, 0);
     bl = tc.getImageData(0, 0, w, h).data;
   }
+  const gamma = Math.pow(2, -a.brightness * 0.9);
+  const k = 1 + a.contrast * 0.8;
   for (let i = 0; i < px.length; i += 4) {
     if (px[i + 3] === 0) continue;
     let r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255;
     if (bl && a.sharpen > 0.005) {
-      const m = 0.35 + (3 - 0.35) * a.sharpen;
+      const m = a.sharpen * 2.2;
       r = clamp01(r + (r - bl[i] / 255) * m); g = clamp01(g + (g - bl[i + 1] / 255) * m); b = clamp01(b + (b - bl[i + 2] / 255) * m);
     }
     if (bl && (Math.abs(a.highlights) > 0.005 || Math.abs(a.shadows) > 0.005)) {
-      const bLum = Math.max(bl[i], bl[i + 1], bl[i + 2]) / 255;
-      if (Math.abs(a.highlights) > 0.005) { r = highAdj(r, bLum, a.highlights); g = highAdj(g, bLum, a.highlights); b = highAdj(b, bLum, a.highlights); }
-      if (Math.abs(a.shadows) > 0.005) { r = shadowsAdj(r, bLum, a.shadows); g = shadowsAdj(g, bLum, a.shadows); b = shadowsAdj(b, bLum, a.shadows); }
+      const lum = (0.2126 * bl[i] + 0.7152 * bl[i + 1] + 0.0722 * bl[i + 2]) / 255;
+      // shadows act on the dark end, highlights on the bright end; positive values lift, negative values deepen
+      const d = a.shadows * 0.35 * (1 - lum) * (1 - lum) + a.highlights * 0.35 * lum * lum;
+      r = clamp01(r + d * (d > 0 ? 1 - r : r)); g = clamp01(g + d * (d > 0 ? 1 - g : g)); b = clamp01(b + d * (d > 0 ? 1 - b : b));
     }
-    if (Math.abs(a.tint) > 0.005) {
-      const y = 0.299 * r + 0.587 * g + 0.114 * b, ii = 0.596 * r - 0.274 * g - 0.322 * b;
-      const q = Math.max(-0.5226, Math.min(0.5226, 0.212 * r - 0.523 * g + 0.311 * b + a.tint * 0.05226));
-      r = clamp01(y + 0.956 * ii + 0.621 * q); g = clamp01(y - 0.272 * ii - 0.647 * q); b = clamp01(y - 1.105 * ii + 1.702 * q);
+    if (Math.abs(a.tint) > 0.005) { g = clamp01(g - a.tint * 0.06); r = clamp01(r + a.tint * 0.03); b = clamp01(b + a.tint * 0.03); }
+    if (Math.abs(a.saturation) > 0.005) {
+      const y = 0.2126 * r + 0.7152 * g + 0.0722 * b, f = 1 + a.saturation;
+      r = clamp01(y + (r - y) * f); g = clamp01(y + (g - y) * f); b = clamp01(y + (b - y) * f);
     }
-    if (Math.abs(a.saturation) > 0.005) { const [hh, ss, vv] = rgb2hsv(r, g, b); [r, g, b] = hsv2rgb(hh, clamp01(ss * (1 + a.saturation)), vv); }
-    if (Math.abs(a.contrast) > 0.005) {
-      const st = a.contrast * 0.5;
-      const y = 0.299 * r + 0.587 * g + 0.114 * b;
-      const u = sig((b - y) / 1.772 + 0.5, st * 0.65) - 0.5, v = sig((r - y) / 1.402 + 0.5, st * 0.65) - 0.5, yy = sig(y, st);
-      r = clamp01(1.402 * v + yy); g = clamp01(yy - (0.299 * 1.402 / 0.587) * v - (0.114 * 1.772 / 0.587) * u); b = clamp01(1.772 * u + yy);
-    }
-    if (Math.abs(a.brightness) > 0.005) { r = bow(r, a.brightness * 1.1); g = bow(g, a.brightness * 1.1); b = bow(b, a.brightness * 1.1); }
-    if (Math.abs(a.warmth) > 0.005) {
-      const t = a.warmth, vec = t > 0 ? [0.1765, -0.1255, 0.0902] : [-0.0588, -0.1569, 0.1255];
-      let y = 0.299 * r + 0.587 * g + 0.114 * b, u = (b - y) / 1.772, v = (r - y) / 1.402;
-      const cs = Math.sin(y * Math.PI) * 0.375 * t;
-      y += cs * vec[0]; u += cs * vec[1]; v += cs * vec[2];
-      r = clamp01(1.402 * v + y); g = clamp01(y - (0.299 * 1.402 / 0.587) * v - (0.114 * 1.772 / 0.587) * u); b = clamp01(1.772 * u + y);
-    }
+    if (Math.abs(a.contrast) > 0.005) { r = clamp01(0.5 + (r - 0.5) * k); g = clamp01(0.5 + (g - 0.5) * k); b = clamp01(0.5 + (b - 0.5) * k); }
+    if (Math.abs(a.brightness) > 0.005) { r = Math.pow(r, gamma); g = Math.pow(g, gamma); b = Math.pow(b, gamma); }
+    if (Math.abs(a.warmth) > 0.005) { r = clamp01(r + a.warmth * 0.08 * (a.warmth > 0 ? 1 - r : r)); b = clamp01(b - a.warmth * 0.08 * (a.warmth > 0 ? b : 1 - b)); }
     px[i] = r * 255; px[i + 1] = g * 255; px[i + 2] = b * 255;
   }
   ctx.putImageData(img, 0, 0);
@@ -475,12 +450,22 @@ export class Preview {
     this.gl.width = c.width; this.gl.height = c.height;
   }
   get size() { return this.src ? [this.src.width, this.src.height] as const : [0, 0] as const; }
-  /** Render the photo pass only (no border/layers). */
-  renderPhoto(doc: Doc) {
+  private lutWait = new Map<string, Promise<void>>();
+  private lutDone = new Set<string>();
+  /**
+   * Render the photo pass only (no border/layers). A filter table that isn't loaded yet renders without it;
+   * `onLutReady` is called once it has loaded so the caller can render again.
+   */
+  renderPhoto(doc: Doc, onLutReady?: () => void) {
     if (!this.src) return;
     const [nw, nh] = nominal(this.src.width, this.src.height);
     const p = renderParams(doc);
-    if (p.lut) void this.renderer.loadLut(p.lut);
+    if (p.lut && !this.lutDone.has(p.lut)) {
+      const name = p.lut;
+      let w = this.lutWait.get(name);
+      if (!w) { w = this.renderer.loadLut(name).then(() => { this.lutDone.add(name); }); this.lutWait.set(name, w); }
+      if (onLutReady) void w.then(onLutReady);
+    }
     // face engine stage (Face / Makeup / Body / Reshape ...), additive: returns this.src when nothing applies
     this.renderer.render(faceStageSource(this.base, this.src, doc.beauty.face), nw, nh, p);
   }
@@ -518,7 +503,7 @@ export async function exportDoc(base: HTMLCanvasElement, doc: Doc): Promise<{ bl
     face?.dispose();
     const out = document.createElement("canvas");
     composite(out, glc, src.width, src.height, doc);
-    // flatten alpha onto black like the native JPEG encoder
+    // flatten alpha onto black (JPEG has no alpha)
     const flat = document.createElement("canvas");
     flat.width = out.width; flat.height = out.height;
     const fc = flat.getContext("2d")!;
