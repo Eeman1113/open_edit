@@ -293,7 +293,8 @@ export function GalleryScreen() {
     if (collage) return;
     const dev = DEV && new URLSearchParams(window.location.search).get("__state") === "tooltip";
     const id = window.setTimeout(() => setTip(dev || isLayoutTooltipNew()), 0);
-    const hide = window.setTimeout(() => setTip(false), 5000);
+    // shown once: after its few seconds on screen it counts as seen
+    const hide = window.setTimeout(() => { setTip((t) => { if (t && !dev) markLayoutTooltipSeen(); return false; }); }, 5000);
     return () => { window.clearTimeout(id); window.clearTimeout(hide); };
   }, [collage]);
   const openLayout = () => router.push("/gallery?mode=collage");
@@ -422,7 +423,8 @@ export function GalleryScreen() {
         </>
       )}
 
-      {!collage && tip && <LayoutBalloon anchor={layoutRef} root={rootRef} onClick={() => { markLayoutTooltipSeen(); setTip(false); openLayout(); }} />}
+      {/* the hint sits over the All / Videos switch, so a tap on it only dismisses it (it never navigates) */}
+      {!collage && tip && <LayoutBalloon anchor={layoutRef} root={rootRef} onClick={() => { markLayoutTooltipSeen(); setTip(false); }} />}
 
       {selView && <SelectViewer items={selView.items.filter((p) => byId.has(p.id))} urls={urls} startId={selView.id} onBack={() => setSelView(null)} onSelect={onTap} />}
       {viewer && <GalleryViewer items={viewerItems} urls={urls} startId={viewer.id} onBack={() => setViewer(null)} onShare={(p) => void onShare(p)} onEdit={openEditor} onDelete={setDel} />}

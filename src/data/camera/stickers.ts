@@ -3,7 +3,7 @@
 // matching `sticker-thumb`. A remote catalogue can be added through the content API; offline the built-in set is
 // all there is.
 import { getAsset, getAssetMeta, listAssets } from "@/lib/assets";
-import { asset } from "@/lib/base";
+import { apiJson } from "@/lib/content/api";
 
 export interface Sticker {
   id: number;
@@ -47,9 +47,7 @@ export const LOCAL_STICKER_CATEGORIES: StickerCategory[] = [
  * categories when the app has no provider (the built-in set is then all there is); rejects only on network errors.
  */
 export async function fetchStickerCatalog(): Promise<StickerCategory[]> {
-  const r = await fetch(asset("/api/stickers"), { headers: { accept: "application/json" } });
-  if (!r.ok) return [];
-  const j: unknown = await r.json().catch(() => null);
+  const j = await apiJson("/api/stickers").catch(() => null);
   return Array.isArray(j) ? (j as StickerCategory[]) : [];
 }
 

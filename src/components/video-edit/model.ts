@@ -60,7 +60,11 @@ export interface VDoc {
   retouch: WarpOp[];
   /** Whole-image creative effect (src/lib/gl/effects.ts), applied to every frame; null = none. */
   fx: { id: string; amount: number } | null;
+  /** Music track mixed under the original sound (from its start, looping); null = none. */
+  music: VMusic | null;
 }
+
+export interface VMusic { id: string; url: string; title: string; volume: number }
 
 export const initialDoc = (durationMs: number): VDoc => ({
   start: 0,
@@ -74,6 +78,7 @@ export const initialDoc = (durationMs: number): VDoc => ({
   reshape: { re: {} },
   retouch: [],
   fx: null,
+  music: null,
 });
 
 export const reshapeActive = (r: Reshape) => (!!r.shape && r.shape.v > 0.001) || Object.values(r.re).some((v) => Math.abs(v) > 0.001);

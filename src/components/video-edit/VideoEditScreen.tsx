@@ -422,7 +422,7 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
                   onReverse={(on) => void setReverse(on)}
                 />
               )}
-              {tab === "Music" && <MusicPanel onChoose={() => { setMusicOpen(true); }} />}
+              {tab === "Music" && <MusicPanel value={live.music} onChange={(m) => update((x) => ({ ...x, music: m }))} onChoose={() => { engineRef.current?.pause(); setMusicOpen(true); }} />}
               {tab === "Frame" && <ArFilterPanel selectedId={live.stickerId} loadingId={stickerLoading} onSelect={selectSticker} />}
             </div>
           )}
@@ -452,7 +452,13 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
         />
       )}
 
-      {musicOpen && <MusicList onClose={() => setMusicOpen(false)} />}
+      {musicOpen && (
+        <MusicList
+          current={live.music?.id ?? null}
+          onClose={() => setMusicOpen(false)}
+          onPick={(t) => update((x) => ({ ...x, music: t ? { id: t.id, url: t.url, title: t.title, volume: x.music?.volume ?? 0.8 } : null }))}
+        />
+      )}
 
       {status === "loading" && <LoadingLayer />}
       <Dialog open={status === "error"} onClose={finish} icon="video" title="Couldn't open this video">

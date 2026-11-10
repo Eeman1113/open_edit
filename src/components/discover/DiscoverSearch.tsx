@@ -14,6 +14,7 @@ import {
   type DiscoverAuthor, type DiscoverPost, type DiscoverTag,
 } from "./types";
 import { media } from "./media";
+import { useBackHandler } from "@/lib/back";
 
 type Tab = "top" | "looks" | "creators" | "tags";
 const TABS: { id: Tab; label: string }[] = [
@@ -23,6 +24,7 @@ const TABS: { id: Tab; label: string }[] = [
 export function DiscoverSearch() {
   const router = useRouter();
   const back = useGoBack("/discover");
+  useBackHandler(back);
   const ugc = useUgc();
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");

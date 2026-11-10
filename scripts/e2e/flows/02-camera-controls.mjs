@@ -1,4 +1,4 @@
-import { openCamera, textOn, camReady } from "../h.mjs";
+import { openCamera, textOn, camReady, slide, audit, closeDrawer } from "../h.mjs";
 
 const label = (prefix) => `[...document.querySelectorAll('button[aria-label]')].map(b => b.getAttribute('aria-label')).find(l => l.startsWith(${JSON.stringify(prefix)})) ?? ''`;
 const checked = (name) => `document.querySelector('[role=switch][aria-label=${JSON.stringify(name)}]')?.getAttribute('aria-checked') ?? ''`;
@@ -66,11 +66,15 @@ export default async function flowCameraControls(s) {
   await s.step("music", async () => {
     await s.click({ label: "Music" });
     await s.waitVisible("No music", { timeout: 4000 });
-    await s.waitFor(`document.querySelectorAll('[aria-label="Play preview"]').length > 0`, { timeout: 6000, msg: "built-in tracks listed" });
-    await s.click({ label: "Close" });
+    await s.waitFor(`document.querySelectorAll('[aria-label="Play preview"]').length >= 8`, { timeout: 6000, msg: "built-in tracks listed" });
+    await s.click({ label: "Play preview" }, { settle: 1200 });
+    await s.waitVisible({ label: "Pause preview" }, { timeout: 3000 });
+    await audit(s, "music sheet");
+    // choose a track: videos recorded next get it (flow 04 checks the review and the file)
+    await s.click("Use", { settle: 1000 });
     await s.waitFor(`!${textOn("No music")}`, { timeout: 3000, msg: "music closed" });
+    await s.assert(`JSON.parse(localStorage.getItem('oe.camera.music') ?? 'null')`, "track remembered");
   });
-
   await s.step("filter-panel", async () => {
     await s.click("Filters");
     await s.waitVisible("Original", { timeout: 4000 });
@@ -92,8 +96,15 @@ export default async function flowCameraControls(s) {
 
   await s.step("beauty-tabs", async () => {
     await s.click("Beauty", { settle: 900 });
-    for (const t of ["Fine-tune", "Makeup", "Beauty"]) await s.click(t, { settle: 700, nth: 0 });
-    await s.click({ label: "Close beauty" }, { settle: 800 });
+    const items = await s.ev(`[...document.querySelectorAll('[data-beauty]')].map(b => b.getAttribute('data-beauty'))`);
+    if (items.length < 3) throw new Error("beauty items: " + items.length);
+    await s.tap({ sel: `[data-beauty="${items[1]}"]` }, { settle: 700 });
+    if (await s.ev(`!!document.querySelector('[role=slider]')`)) await slide(s, 0.8);
+    for (const t of ["Fine-tune", "Makeup"]) await s.click(t, { settle: 700, nth: 0 });
+    const mk = await s.ev(`[...document.querySelectorAll('[data-beauty]')].map(b => b.getAttribute('data-beauty'))`);
+    if (mk.length > 1) await s.tap({ sel: `[data-beauty="${mk[1]}"]` }, { settle: 900 });
+    await audit(s, "beauty");
+    await closeDrawer(s, "Close beauty");
     await s.waitVisible("Effects", { timeout: 3000 });
   });
 
@@ -103,6 +114,10 @@ export default async function flowCameraControls(s) {
     for (const t of ["Featured", "Cute", "Face paint"]) await s.click(t, { settle: 500 });
     const n = await s.ev(`document.querySelectorAll('[data-sticker]').length`);
     if (!n) throw new Error("no effect tiles");
+    await s.tap({ sel: "[data-sticker]" }, { settle: 3000 });
+    await s.waitFor(`document.querySelector('[data-sticker][aria-pressed=true]')`, { timeout: 4000, msg: "effect selected" });
+    await audit(s, "effects");
+    await s.click("None", { settle: 800 });
     await s.click({ label: "Close effects" }, { settle: 800 });
     await s.waitVisible("Effects", { timeout: 3000 });
   });

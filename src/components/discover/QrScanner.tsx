@@ -5,6 +5,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Dialog, IconButton, useGoBack } from "@/components/ui";
+import { useBackHandler } from "@/lib/back";
 
 interface Detector {
   detect(src: CanvasImageSource | ImageBitmap): Promise<{ rawValue: string }[]>;
@@ -17,6 +18,7 @@ const UNSUPPORTED = "This browser can’t scan QR codes. Try a recent version of
 export function QrScanner() {
   const router = useRouter();
   const back = useGoBack("/discover");
+  useBackHandler(back);
   const video = useRef<HTMLVideoElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const [alert, setAlert] = useState<string | null>(null);

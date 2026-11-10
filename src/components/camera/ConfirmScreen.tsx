@@ -10,7 +10,11 @@ import { download, savePhoto } from "@/lib/store";
 import type { Ratio, Rect } from "./layout";
 import { ConfirmVideo } from "./capture/ConfirmVideo";
 import { getSaveRoute } from "@/components/saveroute/SaveRoute";
-import { MusicList } from "./MusicList";
+import { MusicList, type Track } from "./MusicList";
+import { mergeClips } from "./capture/mergeClips";
+import { pickMime } from "./capture/useRecorder";
+import { findTrack } from "@/lib/content/music";
+import { loadPref } from "./prefs";
 
 /** Border shapes: aspect = width / height (−1 = keep the photo's own shape, i.e. no border). */
 export const WHITESPACE_TYPES = [
@@ -77,14 +81,31 @@ const extFor = (b: Blob, video: boolean) => (video ? (b.type.includes("mp4") ? "
 
 export function ConfirmScreen({ capture, rect, autoSave, onSave, onBack, onEdit, initialSaveState = "idle" }: Props) {
   // ---- final file (multi-clip videos are merged in the background) ----
-  const [finalBlob, setFinalBlob] = useState<Blob | null>(capture.ready ? null : capture.blob);
-  const [finalUrl, setFinalUrl] = useState<string | null>(capture.ready ? null : capture.url);
+  // Videos: the track chosen in the camera's Music sheet (or here, with Add music) is mixed into the file.
+  const [music, setMusic] = useState<{ track: Track | null } | null>(capture.isVideo ? null : { track: null });
   useEffect(() => {
-    if (!capture.ready) return;
+    if (!capture.isVideo) return;
+    let alive = true;
+    void findTrack(loadPref<string | null>("music", null)).catch(() => undefined).then((t) => { if (alive) setMusic((m) => m ?? { track: t ?? null }); });
+    return () => { alive = false; };
+  }, [capture.isVideo]);
+  const musicUrl = music?.track?.url ?? null;
+  const [finalBlob, setFinalBlob] = useState<Blob | null>(capture.ready || capture.isVideo ? null : capture.blob);
+  const [finalUrl, setFinalUrl] = useState<string | null>(capture.ready || capture.isVideo ? null : capture.url);
+  useEffect(() => {
+    if (!capture.ready && !capture.isVideo) return;
+    if (!music) return; // the music choice is still being read
     let alive = true, url: string | null = null;
-    capture.ready.then((b) => { if (!alive) return; url = URL.createObjectURL(b); setFinalBlob(b); setFinalUrl(url); }, () => {});
+    const made = musicUrl
+      ? mergeClips(capture.clips ?? [capture.blob], capture.width, capture.height, pickMime(), musicUrl)
+      : capture.ready ?? Promise.resolve(capture.blob);
+    made.then((b) => {
+      if (!alive) return;
+      if (b === capture.blob) { setFinalBlob(b); setFinalUrl(capture.url); return; }
+      url = URL.createObjectURL(b); setFinalBlob(b); setFinalUrl(url);
+    }, () => { if (alive) toast("Couldn’t add the music to this video.", { icon: "alert", tone: "danger" }); });
     return () => { alive = false; if (url) URL.revokeObjectURL(url); };
-  }, [capture.ready]);
+  }, [capture, music, musicUrl]);
 
   // ---- border ----
   const [border, setBorder] = useState(0);
@@ -182,7 +203,7 @@ export function ConfirmScreen({ capture, rect, autoSave, onSave, onBack, onEdit,
       <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between bg-gradient-to-b from-black/45 to-transparent px-3 pb-6 pt-3">
         <IconButton icon="close" label="Discard and go back" variant="glass" size={40} iconSize={20} onClick={onBack} />
         <div className="flex gap-2">
-          {capture.isVideo && <IconButton icon="music" label="Add music" variant="glass" size={40} iconSize={20} onClick={() => setMusicOpen(true)} />}
+          {capture.isVideo && <IconButton icon="music" label={musicUrl ? `Music: ${music?.track?.title}` : "Add music"} variant="glass" size={40} iconSize={20} active={!!musicUrl} onClick={() => setMusicOpen(true)} />}
           {!capture.isVideo && !borderOpen && (
             <Button size="sm" variant="glass" icon="frame" className="h-10 rounded-full" onClick={() => setBorderOpen(true)}>Border</Button>
           )}
@@ -231,7 +252,14 @@ export function ConfirmScreen({ capture, rect, autoSave, onSave, onBack, onEdit,
         </div>
       )}
 
-      {musicOpen && <MusicList onClose={() => setMusicOpen(false)} />}
+      {capture.isVideo && music && !finalBlob && (
+        <div className="pointer-events-none absolute inset-x-0 top-20 z-10 flex justify-center">
+          <span className="flex items-center gap-2 rounded-full bg-glass px-3.5 py-2 text-[13px] font-medium text-white backdrop-blur-md">
+            <Icon name="loader" size={16} className="oe-spin" /> {musicUrl ? `Adding “${music.track?.title}”…` : "Preparing video…"}
+          </span>
+        </div>
+      )}
+      {musicOpen && <MusicList onClose={() => setMusicOpen(false)} onPick={(t) => { if (t?.id === music?.track?.id) return; setFinalBlob(null); setFinalUrl(null); setMusic({ track: t }); }} />}
     </div>
   );
 }

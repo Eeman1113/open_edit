@@ -2,7 +2,8 @@
 
 // Music picker (camera toolbar, the capture review for videos and the video editor). Tracks come from the content
 // API (/api/music, which reads its provider from server-side env) and fall back to the asset pack's built-in loops
-// (kind "music"). Tap a track to preview it, then "Use".
+// (kind "music"). Tap a track to preview it, then "Use". The choice is remembered for the camera (videos recorded
+// afterwards get the track) and reported through `onPick` (the capture review and the video editor apply it).
 import { useEffect, useRef, useState } from "react";
 import { Button, EmptyState, Icon, Sheet, Spinner, cx } from "@/components/ui";
 import { loadMusic } from "@/lib/content/music";
@@ -13,11 +14,11 @@ export type { Track } from "@/lib/content/types";
 
 const mmss = (s?: number) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "");
 
-export function MusicList({ onClose }: { onClose: () => void }) {
+export function MusicList({ onClose, onPick, current }: { onClose: () => void; onPick?: (track: Track | null) => void; current?: string | null }) {
   const [open, setOpen] = useState(true);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [tracks, setTracks] = useState<Track[]>([]);
-  const [chosen, setChosen] = useState<string | null>(() => loadPref<string | null>("music", null));
+  const [chosen, setChosen] = useState<string | null>(() => (current !== undefined ? current : loadPref<string | null>("music", null)));
   const [playing, setPlaying] = useState<string | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -38,7 +39,12 @@ export function MusicList({ onClose }: { onClose: () => void }) {
     void audio.current.play().catch(() => setPlaying(null));
     setPlaying(t.id);
   };
-  const use = (id: string | null) => { setChosen(id); savePref("music", id); close(); };
+  const use = (id: string | null) => {
+    setChosen(id);
+    if (current === undefined) savePref("music", id);
+    onPick?.(id ? tracks.find((t) => t.id === id) ?? null : null);
+    close();
+  };
 
   return (
     <Sheet open={open} onClose={close} title="Music" full z={65}>

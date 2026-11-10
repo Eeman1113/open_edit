@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Button, Dialog, EmptyState, Icon, IconButton, Spinner, Tabs, cx, toast } from "@/components/ui";
 import { isVideoPhoto, listPhotos, type Photo } from "@/lib/store";
 import { fmtDuration } from "@/components/gallery/parts";
+import { useBackHandler } from "@/lib/back";
 
 const OFFLINE = "This template isn’t available right now. Check your connection and try again.";
 
@@ -50,6 +51,7 @@ export function ClipGallery({ clips, templateId }: { clips: number; templateId: 
   const list = useMemo(() => photos.filter((p) => (tab === "video" ? isVideoPhoto(p) : !isVideoPhoto(p) && p.blob.type !== "image/gif")), [photos, tab]);
   const done = picks.length >= clips;
   const close = () => (picks.length ? setDiscard(true) : router.back());
+  useBackHandler(close);
   const pick = (p: Photo) => {
     if (done) return;
     if (isVideoPhoto(p) && (p.duration ?? 0) < 1000) return toast("That clip is too short. Pick one that’s at least 1 second long.");

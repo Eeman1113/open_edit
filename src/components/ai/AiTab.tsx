@@ -2,6 +2,7 @@
 
 // AI tab: a launcher for the on-device AI tools. Pick a tool, pick a photo, and the editor opens with that tool.
 // Every model runs locally in the browser (WebGPU / WASM); nothing is uploaded.
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BottomNav, Icon, cx } from "@/components/ui";
@@ -38,6 +39,15 @@ export function AiTab({ initialTool }: { initialTool?: string }) {
             </button>
           ))}
         </div>
+
+        <Link href="/aistyle" className="oe-press mx-4 mt-3 flex items-center gap-3 rounded-xl bg-panel p-4">
+          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-md bg-accent-soft text-accent"><Icon name="palette" size={24} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-display text-[16px] font-bold">Art styles</span>
+            <span className="block text-[13px] leading-snug text-fg-2">Turn a photo into a painting, sketch or print.</span>
+          </span>
+          <Icon name="arrow-right" size={20} className="text-fg-3" />
+        </Link>
 
         <div className="mx-4 mt-6 flex gap-3 rounded-lg bg-panel p-4">
           <Icon name="privacy" size={22} className="shrink-0 text-ok" />

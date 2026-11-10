@@ -8,7 +8,7 @@ import { Icon, Spinner, Tabs, cx } from "@/components/ui";
 import { enhanceCanvas, photoFaces, type BgMode, type FaceBox, type FaceMode } from "@/lib/ai";
 import { useEdit } from "../ctx";
 import { ControlRow, TOP_H } from "../ui";
-import { AiLoading, MENU, Panel, RetryView, S, useHold, usePhotoArea } from "./common";
+import { AiLoading, EditLoading, MENU, Panel, RetryView, S, useHold, usePhotoArea } from "./common";
 import { aiStepText, useAiJob, useAsyncBake, useBase } from "./aiCommon";
 
 const BG_ITEMS: { key: BgMode; label: string; about: string }[] = [
@@ -166,6 +166,8 @@ export function EnhanceTool() {
           </div>
         </div>
       </Panel>
+      {/* faces are found first (the face model loads on first use), so show that something is happening */}
+      {faces === null && job.pct === null && <EditLoading text="Finding faces…" />}
       {job.pct !== null && <AiLoading text={aiStepText(job.pct)} onCancel={() => { job.cancel(); setLoadingKey(null); openSub(null); }} />}
     </>
   );

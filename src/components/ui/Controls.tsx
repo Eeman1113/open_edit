@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { cx } from "./Button";
 import { Icon, type IconName } from "./Icon";
+import { useBackHandler } from "@/lib/back";
 
 export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label?: string; disabled?: boolean }) {
   return (
@@ -107,6 +108,8 @@ export function ListGroup({ title, footer, children }: { title?: ReactNode; foot
 export function TopBar({ title, onBack, actions, large, transparent, className }: {
   title?: ReactNode; onBack?: () => void; actions?: ReactNode; large?: boolean; transparent?: boolean; className?: string;
 }) {
+  // the back key (Escape) does what the back button does; sheets and dialogs opened on the page close first
+  useBackHandler(() => onBack?.(), !!onBack);
   return (
     <header className={cx("relative z-10 shrink-0", !transparent && "bg-bg", className)}>
       <div className="flex items-center gap-1 px-2" style={{ height: "var(--oe-top-bar)", paddingTop: "env(safe-area-inset-top)" }}>

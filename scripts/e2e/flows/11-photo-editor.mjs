@@ -1,150 +1,241 @@
-import { TEST_PHOTO, importToGallery, nthThumb, editorMain, previewStats, previewThumb, diff } from "../h.mjs";
+// Photo editor: every tab and every tool page once (opened, used where it is cheap, applied or cancelled), the
+// layers popup, Save → the Saved page → Share. Uses the face photo (E2E_PHOTO) so the Portrait tools have faces.
+import {
+  TEST_PHOTO, importToGallery, openThumb, editorMain, editTab, aiDone, slide, apply, cancelTool, audit,
+  previewStats, previewThumb, diff,
+} from "../h.mjs";
 
-async function backToMain(s) {
-  for (let i = 0; i < 5 && !(await s.ev(editorMain)); i++) {
-    // AI tools show a blocking loading popup (AiLoading) while the model prepares: let it finish, else cancel it
-    if (await s.exists({ label: "Cancel" })) {
-      await s.waitFor(`!document.querySelector('[aria-label=Cancel]')`, { timeout: 20000 }).catch(() => {});
-      const x = await s.locate({ label: "Cancel" });
-      if (x) { await s.tapAt(x.x, x.y); await s.sleep(900); continue; }
-    }
-    const c = (await s.locate({ label: "Close" })) ?? (await s.locate("Cancel")) ?? (await s.locate({ label: "close" })) ?? (await s.locate({ label: "Confirm" }));
-    if (c) { await s.tapAt(c.x, c.y); await s.sleep(900); } else { await s.key("Escape"); await s.sleep(600); }
-    // "discard changes?" style dialogs
-    for (const t of ["Discard", "OK", "Yes", "Leave"]) if (await s.exists(t)) { await s.click(t, { settle: 600 }); break; }
-  }
-  if (!(await s.ev(editorMain))) throw new Error("could not return to the editor main menu");
+/** Opens a tool tile of the current tab (scrolling its row like a finger) and waits for the tool page. */
+async function openTool(s, label) {
+  await s.tap(label, { settle: 1500 });
+  await s.waitFor(`!document.querySelector('[aria-label="Editor sections"]') || [...document.querySelectorAll('p')].some(p => p.innerText.trim() === 'Runs on your device')`, { timeout: 25000, msg: `${label} page` });
+  await aiDone(s);
+  await s.sleep(600);
 }
-async function openTab(s, tab) {
-  const pos = `(() => { const b = [...document.querySelectorAll('button')].find(b => b.innerText.trim() === ${JSON.stringify(tab)} && b.getBoundingClientRect().top > 780); if (!b) return null; const r = b.getBoundingClientRect(); return r.left + r.width / 2; })()`;
-  for (let i = 0; i < 4; i++) {
-    const x = await s.ev(pos);
-    if (x == null) throw new Error(`no tab ${tab}`);
-    if (x > 20 && x < 370) break;
-    await s.swipe(x > 370 ? [330, 818] : [60, 818], x > 370 ? [60, 818] : [330, 818], { settle: 700 }); // finger-scroll the tab bar
-  }
-  await s.click(tab, { settle: 1200 });
-}
-const listItems = `(() => { const sc = [...document.querySelectorAll('div')].filter(d => d.scrollWidth > d.clientWidth + 5 && d.getBoundingClientRect().top > 650 && d.getBoundingClientRect().top < 790)[0]; return sc ? [...sc.querySelectorAll('button')].map(b => b.innerText.trim().replace(/\\s+/g, ' ')).filter(Boolean) : []; })()`;
-async function tapItem(s, label) {
-  const ok = await s.ev(`(() => { const sc = [...document.querySelectorAll('div')].filter(d => d.scrollWidth > d.clientWidth + 5 && d.getBoundingClientRect().top > 650 && d.getBoundingClientRect().top < 790)[0]; const b = sc && [...sc.querySelectorAll('button')].find(b => b.innerText.trim().replace(/\\s+/g, ' ') === ${JSON.stringify(label)}); if (!b) return false; sc.scrollTo({ left: Math.max(0, b.offsetLeft - 120) }); return true; })()`);
-  if (!ok) throw new Error(`no item ${label}`);
-  await s.sleep(450);
-  const p = await s.ev(`(() => { const sc = [...document.querySelectorAll('div')].filter(d => d.scrollWidth > d.clientWidth + 5 && d.getBoundingClientRect().top > 650 && d.getBoundingClientRect().top < 790)[0]; const b = [...sc.querySelectorAll('button')].find(b => b.innerText.trim().replace(/\\s+/g, ' ') === ${JSON.stringify(label)}); const r = b.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
-  await s.tapAt(...p);
-}
+/** Mean absolute grey difference of the preview against `before`, after the dock is back. */
+async function changedSince(s, before) { await s.sleep(800); return diff(before, await s.ev(previewThumb)); }
 
 export default async function flowPhotoEditor(s) {
   await s.step("open-editor", async () => {
     await s.goto("/gallery", { settle: 1500 });
     await importToGallery(s, [TEST_PHOTO]);
-    await s.tapAt(...(await s.ev(nthThumb(0)))); await s.sleep(3000);
-    await s.waitFor(`location.pathname === '/edit'`, { timeout: 8000 });
-    await s.waitFor(editorMain, { timeout: 10000, msg: "editor tabs" });
+    await openThumb(s, 0);
+    await s.waitFor(editorMain, { timeout: 15000, msg: "editor dock" });
+    // a face is found → the editor switches to Portrait
+    await s.waitFor(`document.querySelector('[data-tab="PORTRAIT"]')?.getAttribute('aria-selected') === 'true'`, { timeout: 15000, msg: "Portrait picked for a face photo" });
     const st = await s.ev(previewStats);
     if (!st || st.std < 10) throw new Error("preview flat: " + JSON.stringify(st));
+    for (const l of ["Back", "Undo", "Redo", "Save"]) await s.waitVisible({ label: l, exact: false }, { timeout: 3000 }).catch(() => s.waitVisible(l));
+    await audit(s);
   });
 
-  // ---- face bugs reported by face-integration (each has its own proof shot) ----
-  let before;
-  await s.step("face-right-daily-035", async () => {
-    before = await s.ev(previewThumb);
-    await openTab(s, "Portrait"); await tapItem(s, "Face"); await s.sleep(5000); // face detection
-    await s.tapAt(235, 330); await s.sleep(1800); // select the right face (zooms onto it)
-    await s.tapAt(33, 728); await s.sleep(800); // "Face" shapes
-    await s.click("Daily", { settle: 1200 });
-    await s.drag([79, 631], [145, 631], { settle: 3500 }); // ≈ 0.35
+  /* ------------------------------------------------------------ Tools */
+  await s.step("tools-crop", async () => {
+    await editTab(s, "TOOLS");
+    const before = await s.ev(previewThumb);
+    await openTool(s, "Crop");
+    for (const t of ["Rotate", "Tilt", "Crop"]) await s.tap(t, { settle: 600 });
+    await s.tap("1:1", { settle: 900 });
+    await audit(s, "crop");
+    await apply(s);
     const st = await s.ev(previewStats);
-    if (!st || st.w < 100 || st.std < 10) throw new Error("preview turned flat: " + JSON.stringify(st));
+    if (Math.abs(st.w / st.h - 1) > 0.05) throw new Error(`crop 1:1 not applied (${st.w}x${st.h})`);
+    if ((await changedSince(s, before)) < 1) throw new Error("crop changed nothing");
   });
-  await s.step("face-right-slim", async () => {
-    await s.click("Slim", { settle: 1200 });
-    await s.drag([79, 631], [145, 631], { settle: 3500 });
+  await s.step("tools-undo-redo", async () => {
+    await s.click({ label: "Undo" }, { settle: 1200 });
     const st = await s.ev(previewStats);
-    if (!st || st.w < 100 || st.std < 10) throw new Error("preview turned flat: " + JSON.stringify(st));
+    if (Math.abs(st.w / st.h - 1) < 0.05) throw new Error("undo kept the crop");
+    await s.click({ label: "Redo" }, { settle: 1200 });
+    await s.click({ label: "Undo" }, { settle: 1200 }); // keep the full photo for the face tools
   });
-  await s.step("face-hold-original-zoomed", async () => {
-    const o = await s.locate({ xy: [363, 631] });
-    await s.mouse("mouseMoved", o.x, o.y); await s.mouse("mousePressed", o.x, o.y, { buttons: 1 }); await s.sleep(700);
-    const r = await s.ev(`(() => { const img = [...document.querySelectorAll('[data-preview] img')].find(i => i.getBoundingClientRect().width > 0); const c = document.querySelector('[data-preview] canvas'); if (!img || !c) return null; const a = img.getBoundingClientRect(), b = c.getBoundingClientRect(); return [a.x, a.y, a.width, a.height, b.x, b.y, b.width, b.height].map(Math.round); })()`);
-    await s.shot("held");
-    await s.mouse("mouseReleased", o.x, o.y); await s.sleep(500);
-    if (!r) throw new Error("no original image while holding");
-    const [ax, ay, aw, ah, bx, by, bw, bh] = r;
-    if (Math.abs(ax - bx) > 2 || Math.abs(ay - by) > 2 || Math.abs(aw - bw) > 2 || Math.abs(ah - bh) > 2) throw new Error(`original misplaced: img ${r.slice(0, 4)} vs preview ${r.slice(4)}`);
-  });
-  await s.step("face-confirm-keeps-edit", async () => {
-    await s.click({ label: "Confirm" }, { settle: 2500 });
-    await s.waitFor(editorMain, { timeout: 5000 });
-    const after = await s.ev(previewThumb);
-    const d = diff(before, after);
-    if (d < 0.3) throw new Error(`main preview identical to the unedited photo after ✓ (diff ${d.toFixed(2)})`);
-    await s.assert(`!!document.querySelector('[aria-label=Undo], [aria-label=undo]') || [...document.querySelectorAll('button')].some(b => b.getBoundingClientRect().top > 600 && b.getBoundingClientRect().top < 660)`, "undo row");
-  });
-
-  // ---- every tab and tool once ----
-  const tabs = await s.ev(`[...document.querySelectorAll('button')].filter(b => b.getBoundingClientRect().top > 780).map(b => b.innerText.trim()).filter(Boolean)`);
-  for (const tab of tabs) {
-    let items = [];
-    await s.step(`tab-${tab}`, async () => {
-      await backToMain(s);
-      await openTab(s, tab);
-      items = await s.ev(listItems);
+  for (const [tool, act] of [
+    ["Enhance", "apply"], ["Erase", "stroke"], ["Expand", "open"], ["Depth blur", "tap"], ["Cutout", "open"], ["Pixelate", "stroke"],
+  ]) {
+    await s.step(`tools-${tool.toLowerCase().replace(/\W+/g, "-")}`, async () => {
+      await editTab(s, "TOOLS");
+      const before = await s.ev(previewThumb);
+      await openTool(s, tool);
+      if (tool === "Enhance") await s.waitVisible("After", { timeout: 120000 });
+      await audit(s, tool);
+      if (act === "stroke") { await s.drag([150, 380], [250, 420], { settle: 1500 }); await aiDone(s); }
+      if (act === "tap") { await s.tapAt(260, 330); await s.sleep(2500); await aiDone(s); }
+      await s.shot(`tool-${tool}`);
+      if (act === "open") { await cancelTool(s); await s.waitFor(editorMain, { timeout: 8000, msg: "dock after cancel" }); return; }
+      await apply(s);
+      if (act !== "tap" && (await changedSince(s, before)) < 0.3) throw new Error(`${tool} changed nothing`);
     });
-    if (!(await s.ev(editorMain))) { await s.step(`tab-${tab}-close`, async () => backToMain(s)); continue; }
-    for (const it of items) {
-      if (/^(Original)$/.test(it)) continue;
-      await s.step(`${tab}-${it}`.replace(/\W+/g, "_"), async () => {
-        await backToMain(s);
-        await openTab(s, tab);
-        await tapItem(s, it);
-        await s.sleep(tab === "Portrait" ? 2500 : 1500);
-        await s.shot(`${tab}-${it}`.replace(/\W+/g, "_") + "-open");
-        await backToMain(s);
-      }, { shot: false });
-    }
   }
 
-  await s.step("text-add", async () => {
-    await backToMain(s); await openTab(s, "Text");
+  /* ------------------------------------------------------------ Filters, Effects, Adjust */
+  await s.step("filters", async () => {
+    await editTab(s, "FILTER");
+    const before = await s.ev(previewThumb);
+    for (const g of ["Film", "Mood", "Mono", "Everyday"]) await s.tap(g, { settle: 500 });
+    await s.tap("Peach", { settle: 1500 });
+    await slide(s, 0.9);
+    if ((await changedSince(s, before)) < 1) throw new Error("filter not visible");
+    await audit(s, "filters");
+  });
+  await s.step("effects", async () => {
+    await editTab(s, "EFFECTS");
+    const before = await s.ev(previewThumb);
+    for (const g of ["Film", "Lens", "Weather", "Light"]) await s.tap(g, { settle: 500 });
+    await s.tap("Light leak", { settle: 2500 });
+    if ((await changedSince(s, before)) < 1) throw new Error("effect not visible");
+    await audit(s, "effects");
+  });
+  await s.step("adjust-sliders", async () => {
+    await editTab(s, "ADJUST");
+    const before = await s.ev(previewThumb);
+    for (const t of ["Brightness", "Contrast", "Warmth", "Vignette", "Grain"]) { await s.tap(t, { settle: 500 }); await slide(s, 0.8, { settle: 900 }); }
+    if ((await changedSince(s, before)) < 1) throw new Error("adjustments not visible");
+  });
+  for (const page of ["Curves", "Split tone", "Colour mix"]) {
+    await s.step(`adjust-${page.toLowerCase().replace(/\W+/g, "-")}`, async () => {
+      await editTab(s, "ADJUST");
+      await openTool(s, page);
+      await audit(s, page);
+      if (page === "Curves") await s.drag([195, 420], [195, 360], { settle: 1000 });
+      else {
+        const sw = await s.ev(`(() => { const b = [...document.querySelectorAll('button[aria-label^="#"]')].filter(b => b.getBoundingClientRect().width > 0)[1]; if (!b) return null; const r = b.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+        if (sw) { await s.tapAt(...sw); await s.sleep(800); }
+        if (await s.ev(`!!document.querySelector('[role=slider]')`)) await slide(s, 0.8);
+      }
+      await s.shot(`adjust-${page}`);
+      await apply(s);
+    });
+  }
+
+  /* ------------------------------------------------------------ Portrait (face tools) */
+  await s.step("portrait-face-shape", async () => {
+    await editTab(s, "PORTRAIT");
+    const before = await s.ev(previewThumb);
+    await openTool(s, "Face shape");
+    await s.tapAt(260, 330); await s.sleep(1500); // pick the face on the right
+    await s.tap("Slim", { settle: 800 });
+    await slide(s, 0.9, { settle: 2500 });
+    await s.waitVisible("Both", { timeout: 3000 });
+    await s.tap("Eyes", { settle: 600 });
+    await s.tap("Styles", { settle: 600 });
+    await audit(s, "face shape");
+    await apply(s);
+    if ((await changedSince(s, before)) < 0.2) throw new Error("face shape not applied");
+  });
+  for (const [tool, pick] of [
+    ["Retouch", "Smooth"], ["Makeup", "Rose"], ["Skin detail", null], ["Skin brush", "Smooth"], ["Skin tone", "Rosy"],
+    ["Proportions", "Jaw"], ["Sculpt", "Nose"], ["Liquify", null], ["Body", "Slim"], ["Colour", null], ["Eye light", "Ring"],
+    ["Hair colour", "Brown"], ["Volume", null], ["AI Hair", "Brown"],
+  ]) {
+    await s.step(`portrait-${tool.toLowerCase().replace(/\W+/g, "-")}`, async () => {
+      await editTab(s, "PORTRAIT");
+      await openTool(s, tool);
+      if (pick) { await s.tap(pick, { settle: 1500 }); await aiDone(s); }
+      if (tool === "Skin brush" || tool === "Colour" || tool === "Liquify") await s.drag([240, 330], [280, 360], { settle: 1500 });
+      if (await s.ev(`[...document.querySelectorAll('[role=slider]')].some(e => e.getBoundingClientRect().width > 20)`)) await slide(s, 0.7, { settle: 1500 });
+      await aiDone(s);
+      await s.shot(`portrait-${tool}`);
+      await audit(s, tool);
+      await apply(s);
+    });
+  }
+
+  /* ------------------------------------------------------------ Face FX (AR filter) */
+  await s.step("face-fx", async () => {
+    await editTab(s, "STICKER");
+    await s.waitFor(`document.querySelectorAll('[data-sticker]').length > 5`, { timeout: 6000, msg: "Face FX page" });
+    const before = await s.ev(previewThumb);
+    for (const c of ["Cute", "Face paint", "Eyes", "Featured"]) await s.tap(c, { settle: 500 });
+    await s.tap({ sel: '[data-sticker]:nth-child(3)' }, { settle: 5000 });
+    await audit(s, "face fx");
+    await s.shot("face-fx");
+    await apply(s);
+    if ((await changedSince(s, before)) < 0.3) throw new Error("face effect not visible");
+  });
+
+  /* ------------------------------------------------------------ layers: stickers, text, draw */
+  await s.step("stickers", async () => {
+    await editTab(s, "STAMP");
+    await s.click({ label: "Sticker library" }, { settle: 1500 });
+    await s.waitVisible("Sticker library", { exact: false, timeout: 4000 });
+    await audit(s, "sticker library");
+    await s.key("Escape"); await s.sleep(900);
+    const pack = await s.ev(`[...document.querySelectorAll('button[aria-pressed]')].map(b => b.innerText.trim()).find(t => t && !['Recent', 'My stickers'].includes(t))`);
+    if (!pack) throw new Error("no sticker pack chip");
+    await s.tap(pack, { settle: 800 });
+    const p = await s.ev(`(() => { const i = [...document.querySelectorAll('button img')].find(i => i.getBoundingClientRect().width > 20 && i.getBoundingClientRect().top > 450); if (!i) return null; const r = i.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+    if (!p) throw new Error("no sticker in the pack");
+    await s.tapAt(...p); await s.sleep(1200);
+    await apply(s);
+    await s.waitVisible({ label: "Layers (1)" }, { timeout: 4000 });
+  });
+  await s.step("text", async () => {
+    await editTab(s, "TEXT");
     await s.waitVisible("Done", { timeout: 4000 });
     await s.type("Hello Open_Edit");
     await s.click("Done", { settle: 1500 });
-    await s.click({ label: "Confirm" }, { settle: 1200 }).catch(() => {});
-    await backToMain(s);
+    for (const t of ["Outline", "Shadow", "Label", "Align", "Colour"]) await s.tap(t, { settle: 400 });
+    await s.tap("Space Grotesk", { settle: 800 });
+    await audit(s, "text");
+    await apply(s);
+    await s.waitVisible({ label: "Layers (2)" }, { timeout: 4000 });
   });
-  await s.step("brush-draw", async () => {
-    await openTab(s, "Brush"); await s.sleep(2500);
+  await s.step("draw", async () => {
+    await editTab(s, "BRUSH");
+    await s.tap("Marker", { settle: 500 });
     await s.drag([100, 300], [300, 380], { settle: 1000 });
-    await s.click({ label: "Confirm" }, { settle: 1200 });
-    await backToMain(s);
+    await s.tap("Spray", { settle: 500 });
+    await s.drag([100, 420], [300, 360], { settle: 1000 });
+    await audit(s, "draw");
+    await apply(s);
+    await s.waitVisible({ label: "Layers (3)" }, { timeout: 4000 });
   });
-  await s.step("sticker-shop", async () => {
-    await openTab(s, "Stickers");
-    await s.click({ label: "Sticker shop" }, { settle: 2500 });
-    await s.waitFor(`location.pathname === '/stamp-shop' || document.body.innerText.includes('Sticker')`, { timeout: 6000 });
-    await s.shot("shop");
-    if ((await s.ev("location.pathname")) === "/stamp-shop") { await s.back(2000); }
-    else { const c = (await s.locate({ label: "Close" })) ?? (await s.locate({ label: "Back" })); if (c) { await s.tapAt(c.x, c.y); await s.sleep(1200); } }
-    await backToMain(s);
-  });
-  await s.step("border", async () => {
-    await openTab(s, "Border");
-    await s.click("Format", { settle: 900 });
-    const items = await s.ev(`[...document.querySelectorAll('button')].filter(b => { const r = b.getBoundingClientRect(); return r.top > 700 && r.top < 790 && r.width > 20; }).length`);
-    if (!items) throw new Error("no border formats");
-    const p = await s.ev(`(() => { const b = [...document.querySelectorAll('button')].filter(b => { const r = b.getBoundingClientRect(); return r.top > 700 && r.top < 790 && r.width > 20; })[2]; const r = b.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
-    await s.tapAt(...p); await s.sleep(1500);
-    await s.click("Color", { settle: 900 });
+  await s.step("layers-popup", async () => {
+    await s.click({ label: "Layers (3)" }, { settle: 900 });
+    await s.waitVisible("Merge all", { timeout: 3000 });
+    const rows = await s.ev(`document.querySelectorAll('[aria-label="Delete layer"]').length`);
+    if (rows !== 3) throw new Error(`layer list shows ${rows} rows`);
+    await audit(s, "layers");
+    await s.click({ label: "Layers (3)" }, { settle: 700 });
   });
 
-  await s.step("save", async () => {
-    await backToMain(s);
-    await s.click("SAVE", { settle: 3000 });
-    await s.waitVisible("Saved!", { timeout: 15000 });
+  /* ------------------------------------------------------------ Frame */
+  await s.step("frame", async () => {
+    await editTab(s, "BORDER");
+    await s.tap("Shape", { settle: 500 });
+    await s.tap("1:1", { settle: 1200 });
+    await s.tap("Fill", { settle: 500 });
+    await s.click({ label: "Blurred photo" }, { settle: 1500 });
+    const st = await s.ev(previewStats);
+    if (Math.abs(st.w / st.h - 1) > 0.05) throw new Error(`frame 1:1 not applied (${st.w}x${st.h})`);
+    await audit(s, "frame");
   });
-  await s.step("saved-close", async () => {
-    await s.click({ label: "Close" }, { settle: 1200 });
-    await s.waitFor(editorMain, { timeout: 5000 });
+
+  /* ------------------------------------------------------------ Save → Saved → Share */
+  await s.step("save", async () => {
+    await s.click("Save", { settle: 1000 });
+    await s.waitVisible("Saved", { timeout: 30000 });
+    await s.waitVisible("It's in your gallery.", { exact: false, timeout: 3000 });
+    await s.waitFor(`(() => { const i = document.querySelector('img[alt="Saved result"]'); return i && i.complete && i.naturalWidth > 100; })()`, { timeout: 8000, msg: "saved image" });
+    await audit(s, "saved page");
+  });
+  await s.step("share-sheet", async () => {
+    await s.click("Share", { settle: 1000 });
+    await s.waitVisible("Download a copy", { timeout: 3000 });
+    await audit(s, "share sheet");
+    await s.click("Download a copy", { settle: 1200 });
+    await s.waitVisible("Downloaded", { timeout: 3000 });
+  });
+  await s.step("saved-back-to-editing", async () => {
+    await s.click({ label: "Back to editing" }, { settle: 1200 });
+    await s.waitFor(editorMain, { timeout: 5000, msg: "editor again" });
+  });
+  await s.step("saved-open-gallery", async () => {
+    await s.click("Save", { settle: 1000 });
+    await s.waitVisible("Saved", { timeout: 30000 });
+    await s.click("Open gallery", { settle: 1500 });
+    await s.waitFor(`location.pathname === '/gallery'`, { timeout: 6000, msg: "gallery" });
+    const n = await s.ev(`[...document.images].filter(i => /^(blob|data):/.test(i.src) && i.getBoundingClientRect().width > 40).length`);
+    if (n < 3) throw new Error(`gallery shows ${n} items after two saves`);
   });
 }

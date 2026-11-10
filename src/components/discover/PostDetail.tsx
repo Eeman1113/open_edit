@@ -10,10 +10,12 @@ import { isLiked, likeCountOf, toggleLike, useUgc } from "./store";
 import { FollowPopupHost } from "./Popups";
 import { cameraHref, formatCount, profileHref, tagHref, type DiscoverPost } from "./types";
 import { media } from "./media";
+import { useBackHandler } from "@/lib/back";
 
 export function PostDetail({ post }: { post: DiscoverPost }) {
   const router = useRouter();
   const back = useGoBack("/discover");
+  useBackHandler(back);
   const ugc = useUgc();
   const liked = isLiked(ugc, post.id, post.like);
   const count = likeCountOf(ugc, post.id, post.like, post.likeCount);

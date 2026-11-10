@@ -2,7 +2,7 @@
 
 // Brand marks and media helpers.
 import type { CSSProperties, ReactNode } from "react";
-import { asset } from "@/lib/base";
+import { BASE, asset } from "@/lib/base";
 import { cx } from "./Button";
 import { brandUrl } from "./pack";
 
@@ -29,7 +29,8 @@ export function Wordmark({ size = 22, className, mark = true }: { size?: number;
 export function mediaSrc(ref: string | null | undefined): string | undefined {
   if (!ref) return undefined;
   if (/^(https?:|data:|blob:)/.test(ref)) return ref;
-  if (ref.startsWith("/")) return asset(ref);
+  // Catalogue URLs from the content API already carry the base path; prefix only bare site paths.
+  if (ref.startsWith("/")) return BASE && (ref === BASE || ref.startsWith(`${BASE}/`)) ? ref : asset(ref);
   return undefined;
 }
 

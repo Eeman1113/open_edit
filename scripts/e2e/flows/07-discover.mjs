@@ -1,3 +1,4 @@
+import { SAMPLE_PHOTO } from "../h.mjs";
 const at = (p) => `location.pathname.startsWith(${JSON.stringify(p)})`;
 export default async function flowDiscover(s) {
   const disc = async () => s.goto("/discover", { wait: `document.body.innerText.includes('Trending')`, settle: 1500 });
@@ -13,9 +14,25 @@ export default async function flowDiscover(s) {
     await s.waitVisible("Try", { exact: false, timeout: 4000 });
     await s.waitVisible({ label: "Share" });
   });
+  await s.step("post-like", async () => {
+    await s.click({ label: "Like" }, { settle: 600 });
+    await s.waitVisible({ label: "Unlike" }, { timeout: 2000 });
+    await s.click({ label: "Unlike" }, { settle: 600 });
+    await s.waitVisible({ label: "Like" }, { timeout: 2000 });
+  });
   await s.step("post-profile", async () => {
     await s.click("Open_Edit Team", { settle: 1500, exact: false });
     await s.waitFor(at("/discover/profile/"), { timeout: 6000, msg: "profile route" });
+  });
+  await s.step("profile-follow", async () => {
+    const f = await s.locate("Follow");
+    if (f) {
+      await s.tapAt(f.x, f.y); await s.sleep(700);
+      await s.waitVisible("Following", { timeout: 2000 });
+      await s.click("Following", { settle: 700 });
+      if (await s.exists("Unfollow")) await s.click("Unfollow", { settle: 700 });
+    }
+    const a = await s.visualAudit(); if (a.length) throw new Error("visual: " + a.join("; "));
   });
   await s.step("profile-back", async () => {
     await s.click({ label: "Back" }, { settle: 1200 });
@@ -63,6 +80,11 @@ export default async function flowDiscover(s) {
     await s.click({ label: "Scan a QR code" }, { settle: 2000 });
     await s.waitFor(at("/discover/qr"), { timeout: 6000 });
     await s.waitVisible({ label: "Scan from a photo" });
+    // a picture without a code: a clear message (or, without BarcodeDetector, the unsupported note)
+    await s.setFile('input[type=file]', [SAMPLE_PHOTO]);
+    await s.waitVisible("Couldn’t read the code", { timeout: 6000 });
+    await s.key("Escape"); await s.sleep(700);
+    await s.waitFor(`!document.body.innerText.includes('Couldn’t read the code')`, { timeout: 3000, msg: "dialog closed" });
     await s.click({ label: "Close" }, { settle: 1200 });
     await s.waitFor(at("/discover"), { timeout: 6000 });
   });
@@ -71,7 +93,7 @@ export default async function flowDiscover(s) {
     await s.click("Create a look", { settle: 2500 });
     await s.waitFor(at("/lens"), { timeout: 6000 });
     await s.click("Stickers", { settle: 1500 });
-    await s.waitFor(`document.querySelectorAll('a[href^="/?sticker="]').length > 0`, { timeout: 6000, msg: "built-in sticker catalogue" });
+    await s.waitFor(`document.querySelectorAll('button[data-item]').length > 0`, { timeout: 6000, msg: "built-in sticker catalogue" });
   });
   await s.step("lens-close", async () => {
     await s.key("Escape"); await s.sleep(600);

@@ -9,10 +9,11 @@ import { Button, Icon, IconButton, Spinner, Thumb, cx, toast, useGoBack } from "
 import { PhotoPicker } from "@/components/ai/PhotoPicker";
 import { ART_STYLES } from "@/data/content/artStyles";
 import { renderArtStyle } from "@/lib/artstyle";
-import { asset } from "@/lib/base";
+import { apiJson } from "@/lib/content/api";
 import type { ArtStyle } from "@/lib/content/types";
 import { cleanArtStyles } from "@/lib/content/validate";
 import { getPhoto, savePhoto } from "@/lib/store";
+import { useBackHandler } from "@/lib/back";
 
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
@@ -29,6 +30,7 @@ export function AiStyleScreen() {
   const router = useRouter();
   const sp = useSearchParams();
   const back = useGoBack("/ai");
+  useBackHandler(back);
   const id = sp.get("id");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
@@ -51,8 +53,7 @@ export function AiStyleScreen() {
   // Catalogue: the content API, else the built-in styles (e.g. on static hosting without route handlers).
   useEffect(() => {
     let alive = true;
-    fetch(asset("/api/aistyle"))
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    apiJson("/api/aistyle")
       .then((j: unknown) => cleanArtStyles(j, window.location.href))
       .then((s) => alive && setStyles(s.length ? s : ART_STYLES), () => alive && setStyles(ART_STYLES));
     return () => { alive = false; };

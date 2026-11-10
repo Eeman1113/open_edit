@@ -1,4 +1,4 @@
-import { openCamera, reviewUp } from "../h.mjs";
+import { openCamera, reviewUp, audit } from "../h.mjs";
 export default async function flowVideoRecord(s) {
   await openCamera(s, { fresh: true });
   await s.step("video-mode", async () => {
@@ -22,12 +22,32 @@ export default async function flowVideoRecord(s) {
     await s.waitFor(reviewUp, { timeout: 15000, msg: "video review" });
     await s.waitFor(`[...document.querySelectorAll('video')].some(v => v.readyState >= 2 && v.duration > 0.5)`, { timeout: 10000, msg: "review video playable" });
   });
+  await s.step("review-music", async () => {
+    // flow 02 chose a track in the camera's Music sheet: the review mixes it into the file
+    const label = await s.ev(`[...document.querySelectorAll('button[aria-label^="Music: "], button[aria-label="Add music"]')].map(b => b.getAttribute('aria-label'))[0] ?? ''`);
+    if (!label.startsWith("Music: ")) {
+      await s.click({ label: "Add music" }, { settle: 1200 });
+      await s.waitVisible("No music", { timeout: 4000 });
+      await s.click("Use", { settle: 1200 });
+    }
+    await s.waitFor(`!!document.querySelector('button[aria-label^="Music: "]')`, { timeout: 5000, msg: "review names the track" });
+    await s.click({ label: await s.ev(`document.querySelector('button[aria-label^="Music: "]').getAttribute('aria-label')`) }, { settle: 1200 });
+    await s.waitVisible("Selected", { timeout: 4000 });
+    await audit(s, "music sheet");
+    await s.key("Escape"); await s.sleep(800);
+  });
   await s.step("video-save", async () => {
     // clips are merged first; Save is disabled until the file exists
     await s.waitFor(`document.querySelector('[aria-label="Save to gallery"]') && !document.querySelector('[aria-label="Save to gallery"]').disabled`, { timeout: 20000, msg: "merged file ready" });
     await s.click({ label: "Save to gallery" }, { settle: 300 });
-    await s.waitFor(`document.body.innerText.includes('Saved') || document.querySelector('[aria-label="Save to gallery"]')?.disabled`, { timeout: 20000, msg: "video saved" });
+    await s.waitFor(`document.querySelector('[aria-label="Save to gallery"]')?.innerText.includes('Saved')`, { timeout: 20000, msg: "video saved" });
     await s.sleep(800);
+    // the saved file has sound (the music track mixed in)
+    const v = `[...document.querySelectorAll('video')].find(v => v.getBoundingClientRect().width > 100)`;
+    await s.ev(`(() => { const v = ${v}; v.muted = true; v.currentTime = 0; return v.play().catch(() => 0); })()`);
+    await s.sleep(1500);
+    const bytes = await s.ev(`${v}.webkitAudioDecodedByteCount ?? -1`);
+    if (bytes === 0) throw new Error("reviewed video has no sound track");
   });
   await s.step("video-edit", async () => {
     await s.click("Edit", { settle: 3000 });
@@ -35,6 +55,7 @@ export default async function flowVideoRecord(s) {
   });
   await s.step("back-to-camera", async () => {
     await s.goto("/"); await openCamera(s);
+    await s.ev(`localStorage.removeItem('oe.camera.music')`);
     await s.click("Photo", { settle: 800 }).catch(() => {});
   });
 }

@@ -15,7 +15,7 @@ Open_Edit has its own look: a dark, photo-first interface with one warm accent. 
   - `icon` and `icon-maskable`: app icon SVGs on the ink tile, the maskable one inside the 80% safe zone
   - `icon-192`, `icon-512`, `icon-maskable-512`, `apple-touch-icon`, `favicon` (SVG), `favicon-32`, `favicon-ico`
 - **Metadata:** `src/app/layout.tsx` sets the title template (`%s · Open_Edit`), description, icons, theme colour and
-  colour scheme. `src/app/manifest.ts` produces the installable PWA manifest (standalone, portrait, maskable icon).
+  colour scheme. `src/app/manifest.tsx` produces the installable PWA manifest (standalone, portrait, maskable icon).
   Both resolve brand files through `brandUrlStatic()` in `ui/brand-static.ts`, which works in server components.
 - **In the UI:** `<Logo/>` and `<Wordmark/>` (in `ui/Media.tsx`) load the mark from the active pack.
 

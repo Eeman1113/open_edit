@@ -7,6 +7,7 @@ const CASES = [
   ["tab-me", "openedit://me", `location.pathname === '/my'`],
   ["camera-filter", "openedit://camera?filter=4", `location.pathname === '/' && location.search.includes('filter=4')`],
   ["camera-sticker", "openedit://camera?sticker=103", `location.pathname === '/' && location.search.includes('sticker=103')`],
+  ["camera-face-style", "openedit://camera?beauty=slim", `location.pathname === '/' && location.search.includes('beauty=slim') && !!document.querySelector('[aria-label="Close beauty"]')`],
   ["discover-post", "openedit://discover?post=p0_0", `location.pathname === "/discover/post/p0_0" && document.body.innerText.includes("Try")`],
   ["discover-search", "openedit://discover?search", `location.pathname === '/discover/search'`],
   ["gallery", "openedit://gallery", `location.pathname === '/gallery'`],

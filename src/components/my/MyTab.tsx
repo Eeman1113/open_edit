@@ -52,6 +52,8 @@ export function MyTab() {
           <ListRow icon="gallery" title="Gallery" href="/gallery" />
           <ListRow icon="collage" title="Make a collage" href="/gallery?mode=collage" />
           <ListRow icon="effects" title="Create a look" subtitle="Save your own filter and effect combo." href="/lens" />
+          <ListRow icon="frame" title="Templates" subtitle="Collage layouts and ready-made designs." href="/studio" />
+          <ListRow icon="palette" title="Art styles" subtitle="Turn a photo into a painting or sketch." href="/aistyle" />
         </ListGroup>
         <ListGroup title="App">
           <ListRow icon="settings" title="Settings" href="/settings" />

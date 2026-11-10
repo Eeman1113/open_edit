@@ -1,7 +1,7 @@
 // Music catalogue for the client: the content API (/api/music) first, then the active asset pack's built-in
 // tracks (kind "music") when the API is unreachable (e.g. static hosting). Used by every music picker.
 import { getAsset, getAssetMeta, listAssets } from "@/lib/assets";
-import { asset } from "@/lib/base";
+import { apiJson } from "./api";
 import type { Track } from "./types";
 import { cleanTracks } from "./validate";
 
@@ -18,8 +18,7 @@ let cache: Promise<Track[]> | null = null;
 /** All tracks (cached for the page's lifetime; `fresh` refetches). */
 export function loadMusic(fresh = false): Promise<Track[]> {
   if (!cache || fresh) {
-    cache = fetch(asset("/api/music"))
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    cache = apiJson("/api/music")
       .then((j: unknown) => cleanTracks(j, window.location.href))
       .then((t) => (t.length ? t : packTracks()), () => packTracks());
   }

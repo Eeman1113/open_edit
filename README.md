@@ -43,7 +43,7 @@ demo content. No environment variables are required.
 | `npm run typecheck` | TypeScript (`tsc --noEmit`) |
 | `npm run audit` | Provenance audit and dependency licence check |
 | `npm run gen:assets` | Regenerate the built-in asset pack (`scripts/gen-*.mjs`, needs ffmpeg for media) |
-| `npm run e2e` | End-to-end flows in headless Chrome against a running server (`E2E_BASE`, default `http://localhost:3700`) |
+| `npm run e2e` | End-to-end flows in headless Chrome against a running dev server (`E2E_BASE`, default `http://localhost:3000`; see [docs/testing.md](docs/testing.md)) |
 
 ## Configuration
 
@@ -85,7 +85,9 @@ scripts/             asset generators, provenance audit, licence report, e2e har
 - [docs/design.md](docs/design.md): design system and identity
 - [docs/engine.md](docs/engine.md): rendering, face engine, generated assets and asset packs
 - [docs/platform.md](docs/platform.md): server API, providers, sessions, privacy, security headers
-- [docs/deploy.md](docs/deploy.md): Node, Docker and Vercel
+- [docs/deploy.md](docs/deploy.md): Node, Docker, Vercel and GitHub Pages
+- [docs/features.md](docs/features.md): every feature, where it is in the app and its status
+- [docs/testing.md](docs/testing.md): the end-to-end suite, how to run it and the latest results
 
 ## Deploy
 
@@ -95,6 +97,21 @@ docker compose up --build          # http://localhost:3000
 
 Or deploy to Vercel with no configuration, or run the standalone Node server. Details in
 [docs/deploy.md](docs/deploy.md).
+
+### GitHub Pages (static)
+
+A static build is published to <https://eeman1113.github.io/open_edit/> by
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) on every push to `main`
+(`OE_STATIC_EXPORT=1 NEXT_PUBLIC_BASE_PATH=/open_edit`). It runs the whole app in the browser, with these limits:
+
+- **No server API.** The catalogues (music, art styles, effects, look-creator assets, templates, feeds) are the
+  built-in ones, snapshotted to JSON at build time.
+- **No online providers.** `OE_*` provider settings and the AI Hair styles service don't apply; AI Hair offers its
+  on-device tools only.
+- **No COOP/COEP headers** (GitHub Pages can't set them), so pages aren't cross-origin isolated and the on-device
+  AI runs single-threaded WASM. WebGPU still works where the browser supports it.
+
+See [docs/deploy.md](docs/deploy.md#github-pages-static) for how it works and how to build it locally.
 
 ## Contributing
 

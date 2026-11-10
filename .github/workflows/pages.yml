@@ -1,0 +1,85 @@
+name: GitHub Pages
+
+# Static export of the app to https://<owner>.github.io/<repo>/ (see docs/deploy.md, "GitHub Pages (static)").
+# One-time setup: Settings → Pages → Build and deployment → Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push waits instead of cancelling a deployment in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Static export
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      OE_STATIC_EXPORT: "1"
+      # The project site lives under /<repo>; must match for the JSON snapshots and the build.
+      NEXT_PUBLIC_BASE_PATH: /open_edit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # The open asset pack, the models, the ONNX runtime and MediaPipe files are committed, so `npm run gen:assets`
+      # (which also needs ffmpeg for the music loops) is not needed here. Fail early if something is missing.
+      - name: Check committed assets
+        run: |
+          for f in public/packs/open/manifest.json public/models/migan_pipeline_v2.onnx \
+                   public/models/depth-anything-v2-small.int8.onnx public/ort public/mediapipe/wasm; do
+            test -e "$f" || { echo "::error::missing $f (run npm run gen:assets and commit the result)"; exit 1; }
+          done
+
+      - name: Content snapshots (public/api-static)
+        run: node scripts/gen-static-api.mjs
+
+      - name: Static build (out/)
+        run: npx next build
+
+      - name: Check the export
+        run: |
+          touch out/.nojekyll
+          test -f out/index.html
+          test -f out/404.html
+          test -f out/api-static/music.json
+          test -f out/models/migan_pipeline_v2.onnx
+          test ! -e out/api || { echo "::error::route handlers leaked into the static export"; exit 1; }
+          grep -q '/open_edit/_next/' out/index.html || { echo "::error::base path missing from out/index.html"; exit 1; }
+          grep -q '"/open_edit/packs/' out/api-static/music.json || { echo "::error::snapshots lack the base path"; exit 1; }
+          du -sh out
+
+      - uses: actions/configure-pages@v5
+
+      # v3 packs every file in out/ (including .nojekyll) except .git/.github.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,4 +1,4 @@
-import { openCamera, reviewUp, shoot } from "../h.mjs";
+import { openCamera, reviewUp, shoot, audit, GALLERY_DB } from "../h.mjs";
 const AUTO_SAVE = "oe.camera.isAutoSave"; // src/components/camera/prefs.ts namespace + key
 export default async function flowCameraCapture(s) {
   await openCamera(s, { fresh: true });
@@ -14,13 +14,22 @@ export default async function flowCameraCapture(s) {
   });
   await s.step("review-border", async () => {
     await s.click("Border", { settle: 900 });
-    await s.key("Escape"); await s.sleep(800);
+    await s.waitVisible("White border", { timeout: 3000 });
+    for (const t of ["9:16", "3:4", "4:3", "16:9", "None"]) await s.tap(t, { settle: 500 });
+    await s.tap("1:1", { settle: 1500 });
+    await audit(s, "border sheet");
+    await s.shot("border-1-1");
+    await s.click("Done", { settle: 800 });
     await s.assert(reviewUp, "still reviewing");
   });
   await s.step("review-save", async () => {
+    await s.waitFor(`!document.querySelector('[aria-label="Save to gallery"]').disabled`, { timeout: 8000, msg: "bordered file ready" });
     await s.click({ label: "Save to gallery" }, { settle: 300 });
-    await s.waitFor(`document.body.innerText.includes('Saved') || document.querySelector('[aria-label="Save to gallery"]')?.disabled`, { timeout: 8000, msg: "saved state" });
+    await s.waitFor(`document.querySelector('[aria-label="Save to gallery"]')?.innerText.includes('Saved')`, { timeout: 8000, msg: "Saved" });
     await s.sleep(800);
+    // the stored file is the 1:1 white-border composite
+    const dims = await s.ev(`new Promise((res) => { const q = indexedDB.open('${GALLERY_DB}'); q.onsuccess = () => { const db = q.result; const names = [...db.objectStoreNames]; const tx = db.transaction(names[0]); const all = tx.objectStore(names[0]).getAll(); all.onsuccess = () => { const p = all.result.sort((a, b) => (b.createdAt ?? b.date ?? 0) - (a.createdAt ?? a.date ?? 0))[0]; res(p ? [p.width, p.height] : null); }; all.onerror = () => res(null); }; q.onerror = () => res(null); })`);
+    if (!dims || Math.abs(dims[0] / dims[1] - 1) > 0.02) throw new Error("saved photo is not the 1:1 border composite: " + JSON.stringify(dims));
   });
   await s.step("back-to-camera-thumb", async () => {
     await s.click({ label: "Discard and go back" }, { settle: 1200 });
@@ -54,6 +63,30 @@ export default async function flowCameraCapture(s) {
       const t = await s.ev(`[...document.querySelectorAll('button[aria-label^="Timer"]')][0]?.getAttribute('aria-label')`);
       await s.click({ label: t }, { settle: 400 });
     }
+  });
+  await s.step("bounce-shot", async () => {
+    await s.goto("/"); await openCamera(s);
+    await s.click({ label: "Bounce off" }, { settle: 600 });
+    await s.click({ label: "Take photo" }, { settle: 300 }).catch(() => s.click({ sel: '[aria-label="Record video"]' }));
+    await s.waitFor(reviewUp, { timeout: 15000, msg: "bounce review" });
+    await s.waitFor(`[...document.querySelectorAll('video')].some(v => v.readyState >= 2 && v.duration > 0.3)`, { timeout: 10000, msg: "bounce loop plays" });
+    await audit(s, "bounce review");
+    await s.click({ label: "Discard and go back" }, { settle: 1000 });
+    if (await s.exists("Discard")) await s.click("Discard", { settle: 800 });
+    await s.click({ label: "Bounce on" }, { settle: 600 });
+  });
+  await s.step("collage-capture", async () => {
+    await s.click({ label: "Collage" }, { settle: 900 });
+    // one shot per cell of the chosen layout, then the review opens
+    for (let i = 0; i < 6 && !(await s.ev(reviewUp)); i++) {
+      await s.click({ label: "Take photo" }, { settle: 300, timeout: 3000 }).catch(() => {});
+      await s.waitFor(reviewUp, { timeout: 1800 }).catch(() => {});
+    }
+    await s.waitFor(reviewUp, { timeout: 10000, msg: "collage review" });
+    await s.waitFor(`(() => { const i = document.querySelector('img[alt="Captured photo"]'); return i && i.naturalWidth > 100; })()`, { timeout: 6000, msg: "collage image" });
+    await s.click({ label: "Discard and go back" }, { settle: 1000 });
+    if (await s.exists("Discard")) await s.click("Discard", { settle: 800 });
+    await s.click({ label: "Leave collage" }, { settle: 900 });
   });
   await s.ev(`localStorage.removeItem('${AUTO_SAVE}')`);
 }

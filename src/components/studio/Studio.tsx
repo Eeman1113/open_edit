@@ -3,8 +3,8 @@
 // Templates: ready-made photo and video templates from the content API (/api/templates). Collage layouts are
 // built in and always available; online templates appear when a content service is connected.
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { Button, ListGroup, ListRow, ScrollBody, Screen, Spinner, TopBar, toast, useGoBack } from "@/components/ui";
+import { useEffect, useState } from "react";
+import { Button, EmptyState, ListGroup, ListRow, ScrollBody, Screen, TopBar, useGoBack } from "@/components/ui";
 import { useContentCatalog } from "@/components/lens/LensEditor";
 
 export function Studio() {
@@ -25,22 +25,27 @@ export function Studio() {
   );
 }
 
-/** /studio/detail?id=…: a single online template. Without a content service it explains and returns. */
+/** /studio/detail?id=…: a single online template. Templates come from a content service; without one (or offline)
+ *  the page says so and offers the built-in ones. */
 export function StudioDetail() {
   const router = useRouter();
-  const back = () => (window.history.length > 1 ? router.back() : router.replace("/studio"));
+  const back = useGoBack("/studio");
+  const [offline, setOffline] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => {
-      toast(navigator.onLine === false ? "You’re offline. Connect and try again." : "This template isn’t available right now.", { icon: "offline" });
-      if (!(process.env.NODE_ENV !== "production" && window.location.search.includes("__still"))) back();
-    }, 900);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read the connection state once on the client
+    setOffline(navigator.onLine === false);
   }, []);
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black">
-      <div className="absolute left-2 top-2"><Button variant="glass" size="sm" icon="back" className="rounded-full" onClick={back}>Back</Button></div>
-      <Spinner size={28} className="text-fg-2" />
-    </div>
+    <Screen>
+      <TopBar title="Template" onBack={back} />
+      <div className="flex flex-1 items-center justify-center pb-16">
+        <EmptyState
+          icon="offline"
+          title="This template isn’t available right now."
+          body={offline ? "You’re offline. Connect and try again." : "Online templates need a content service. The built-in collage layouts are always available."}
+          action={<Button icon="frame" onClick={() => router.replace("/studio")}>Built-in templates</Button>}
+        />
+      </div>
+    </Screen>
   );
 }

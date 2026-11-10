@@ -72,8 +72,9 @@ export default async function flowBackNav(s) {
   });
   await s.step("about-back-chain", async () => {
     await s.goto("/my", { settle: 1200 });
-    await s.click("About Open_Edit", { settle: 1200 });
-    await s.click("Open-source licences", { settle: 1500 });
+    await s.tap("About Open_Edit", { settle: 1200, exact: false });
+    await s.tap("Open-source licences", { settle: 1500, exact: false });
+    await s.waitFor(at("/settings/about/opensource"), { timeout: 5000 });
     await s.click({ label: "Back" }, { settle: 1200 });
     await s.waitFor(at("/settings/about"), { timeout: 5000 });
     await s.click({ label: "Back" }, { settle: 1200 });

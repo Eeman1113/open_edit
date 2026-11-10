@@ -3,18 +3,21 @@
 // Look creator sub-pages: the asset search, the look name and its tags.
 import { useEffect, useState } from "react";
 import { Button, Icon, TopBar, useGoBack } from "@/components/ui";
-import { useContentCatalog } from "./LensEditor";
+import { useContentCatalog, useLookDraft } from "./LensEditor";
+import { useBackHandler } from "@/lib/back";
 
 const TITLE_MAX = 30;
 export const LOOK_TITLE_KEY = "oe.look.title";
 export const LOOK_TAGS_KEY = "oe.look.tags";
 
-/** Search the online asset catalog for the look creator. */
+/** Search the look creator's catalogue; picking an entry adds it to the look being made. */
 export function AssetStore() {
   const back = useGoBack("/lens");
+  useBackHandler(back);
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
-  const list = useContentCatalog("store", search);
+  const { toggle, isPicked } = useLookDraft();
+  const list = useContentCatalog("store", search, { onPick: toggle, isPicked });
   return (
     <div className="absolute inset-0 z-50 flex flex-col bg-bg">
       <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-[max(10px,env(safe-area-inset-top))]">

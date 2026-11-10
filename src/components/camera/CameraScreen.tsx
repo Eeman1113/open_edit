@@ -15,6 +15,8 @@ import { FilterPanel, PANEL_H as FILTER_PANEL_H, type FilterCategory } from "./F
 import { STICKER_PANEL_H, StickerPanel } from "./StickerPanel";
 import { cameraFilterCategories, useFilterInventory } from "./FilterInventory";
 import { BEAUTY_PANEL_H, BeautyPanel, applyBeautyChange, beautyRenderParams, restoreBeautyState, type BeautyState } from "./BeautyPanel";
+import { FACE_SHAPE_DEFAULT } from "@/data/camera/beauty";
+import { facePreset } from "@/lib/face/presets";
 import { beautyFaceParams, bodySlimValue } from "./faceParams";
 import { FaceTracker, StickerRuntime, makeupActive, parseSticker, type FaceRenderParams } from "@/lib/face";
 import { STICKER_BASE, findSticker, type Sticker } from "@/data/camera/stickers";
@@ -111,7 +113,12 @@ export function CameraScreen() {
   const [liveStrength, setLiveStrength] = useState<number | null>(null);
   const [sliderOpen, setSliderOpen] = useState(false);
   // two-way items hold f + 1 on a 0…2 bar; makeup looks are stored too
-  const [beautyState, setBeautyState] = useState<BeautyState>(() => restoreBeautyState(loadPref<BeautyState | null>("beautyState.v2", null)));
+  const [beautyState, setBeautyState] = useState<BeautyState>(() => {
+    const st = restoreBeautyState(loadPref<BeautyState | null>("beautyState.v2", null));
+    // ?beauty=<face style> (Home face styles, saved looks) selects that style
+    const style = deepLink.get("beauty");
+    return style && facePreset(style) ? { ...st, faceShape: style, faceShapePower: st.faceShapePower > 0 ? st.faceShapePower : FACE_SHAPE_DEFAULT } : st;
+  });
   // ?sticker=<id> deep link selects the effect when it is in the local catalog
   const [stickerId, setStickerId] = useState<number | null>(() => findSticker(Number(deepLink.get("sticker")))?.id ?? null);
   const [beautyOriginal, setBeautyOriginal] = useState(false);

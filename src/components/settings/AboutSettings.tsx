@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { ListGroup, ListRow, ScrollBody, Screen, Sheet, TopBar, Wordmark, useGoBack } from "@/components/ui";
 
-export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.1.0";
+export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "0.1.0";
 
 const PRIVACY = [
   "Open_Edit runs in your browser. There are no accounts and no sign-in.",

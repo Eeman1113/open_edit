@@ -6,6 +6,7 @@
 //   GET  /api/ai/hair  → { available: boolean, provider?: string, styles: { id, name, thumb? }[] }
 //   POST /api/ai/hair  multipart: image (JPEG, long side ≤ 1024), style (id)  → the restyled photo (image/jpeg or png)
 import { asset } from "@/lib/base";
+import { apiJson } from "@/lib/content/api";
 
 export interface HairStyle { id: string; name: string; thumb?: string }
 export interface HairServiceInfo { available: boolean; provider?: string; styles: HairStyle[] }
@@ -31,9 +32,7 @@ function clean(j: unknown): HairServiceInfo {
 /** What the server offers. Never throws: anything unexpected means "not available". */
 export async function hairService(signal?: AbortSignal): Promise<HairServiceInfo> {
   try {
-    const r = await fetch(asset(URL_PATH), { signal, headers: { accept: "application/json" } });
-    if (!r.ok) return NO_SERVICE;
-    return clean(await r.json());
+    return clean(await apiJson(URL_PATH, { signal })); // static hosting: the snapshot says "not available"
   } catch {
     return NO_SERVICE;
   }

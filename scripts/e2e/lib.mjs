@@ -6,7 +6,7 @@ import os from "node:os";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import path from "node:path";
 
-export const BASE_URL = process.env.E2E_BASE ?? "http://localhost:3700";
+export const BASE_URL = process.env.E2E_BASE ?? "http://localhost:3000"; // `npm run dev`
 export const SCRATCH = process.env.E2E_SCRATCH ?? path.join(os.tmpdir(), "open_edit-e2e");
 export const OUT = process.env.E2E_OUT ?? path.join(SCRATCH, "proof/e2e");
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -60,7 +60,14 @@ export class Session {
     this.ws = ws; this.kill = kill; this.id = 0; this.pending = new Map();
     this.errors = []; this.results = []; this.flow = "init"; this.flowNo = 0; this.shotNo = 0;
     this.reqs = new Map();
+    this.dead = false;
     ws.addEventListener("message", (e) => this.onMsg(JSON.parse(e.data)));
+    // Chrome gone (crash, out of memory): fail everything waiting instead of hanging
+    ws.addEventListener("close", () => {
+      this.dead = true;
+      for (const p of this.pending.values()) p.rej(new Error("chrome closed"));
+      this.pending.clear();
+    });
   }
   onMsg(m) {
     if (m.id && this.pending.has(m.id)) { const p = this.pending.get(m.id); this.pending.delete(m.id); if (m.error) p.rej(new Error(`${p.method}: ${m.error.message}`)); else p.res(m.result); return; }
@@ -80,13 +87,22 @@ export class Session {
       if (!P.canceled && P.errorText !== "net::ERR_ABORTED") this.err("net", `${P.errorText} ${this.reqs.get(P.requestId) ?? ""}`);
     }
   }
+  /** Marks errors matching `re` as expected for the rest of the current step (e.g. a deliberate 400). */
+  allow(re) { (this.allowed ??= []).push(re); }
   err(kind, text) {
     text = String(text).slice(0, 600);
     if (IGNORE.some((r) => r.test(text))) return;
+    if (this.allowed?.some((r) => r.test(text))) return;
     this.errors.push({ flow: this.flow, kind, text });
   }
-  send(method, params = {}) {
-    return new Promise((res, rej) => { const i = ++this.id; this.pending.set(i, { res, rej, method }); this.ws.send(JSON.stringify({ id: i, method, params })); });
+  send(method, params = {}, timeout = 60000) {
+    if (this.dead) return Promise.reject(new Error("chrome closed"));
+    return new Promise((res, rej) => {
+      const i = ++this.id;
+      const t = setTimeout(() => { if (this.pending.delete(i)) rej(new Error(`${method}: no answer in ${timeout} ms`)); }, timeout);
+      this.pending.set(i, { res: (v) => { clearTimeout(t); res(v); }, rej: (e) => { clearTimeout(t); rej(e); }, method });
+      this.ws.send(JSON.stringify({ id: i, method, params }));
+    });
   }
   async init() {
     await this.send("Runtime.enable"); await this.send("Log.enable"); await this.send("Page.enable"); await this.send("Network.enable");
@@ -112,6 +128,7 @@ export class Session {
     const t0 = Date.now();
     let last;
     while (Date.now() - t0 < timeout) {
+      if (this.dead) throw new Error("chrome closed");
       try { last = await this.ev(`(()=>{try{const v = (${expr}); return v && typeof v === 'object' ? true : v}catch(e){return false}})()`); if (last) return last; } catch { /* nav in progress */ }
       await sleep(150);
     }
@@ -168,9 +185,40 @@ export class Session {
     return this.ev(js);
   }
   async exists(target, opts) { return !!(await this.locate(target, opts)); }
+  /** Scrolls the first element matching `target` (text / label / sel, buttons preferred) into the middle of its
+   *  scroll containers, like a finger would before tapping it. Returns false when nothing matches. */
+  async reveal(target, { exact = true } = {}) {
+    if (typeof target === "string") target = { text: target };
+    return this.ev(`(() => {
+      const T = ${JSON.stringify(target)}, exact = ${exact};
+      const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+      let els = [];
+      if (T.sel) els = [...document.querySelectorAll(T.sel)];
+      else if (T.label) els = [...document.querySelectorAll('[aria-label],[title]')].filter(e => { const l = e.getAttribute('aria-label') ?? e.getAttribute('title'); return exact ? l === T.label : (l || '').toLowerCase().includes(T.label.toLowerCase()); });
+      else els = [...document.querySelectorAll('button,a,[role=button],[role=tab],label')].filter(e => { const t = norm(e.innerText ?? e.textContent); return exact ? t === T.text : t.toLowerCase().includes(T.text.toLowerCase()); });
+      els = els.filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+      const e = els[0]; if (!e) return false;
+      // only real scrollers move (overflow: hidden screens are never scrolled, unlike scrollIntoView)
+      for (let p = e.parentElement; p && p !== document.body; p = p.parentElement) {
+        const cs = getComputedStyle(p), r = e.getBoundingClientRect(), q = p.getBoundingClientRect();
+        if (/auto|scroll/.test(cs.overflowX) && p.scrollWidth > p.clientWidth + 1) p.scrollLeft += (r.left + r.width / 2) - (q.left + q.width / 2);
+        if (/auto|scroll/.test(cs.overflowY) && p.scrollHeight > p.clientHeight + 1) p.scrollTop += (r.top + r.height / 2) - (q.top + q.height / 2);
+      }
+      return true;
+    })()`);
+  }
+  /** reveal + click */
+  async tap(target, opts = {}) {
+    for (let i = 0; ; i++) {
+      await this.reveal(target, opts).catch(() => false);
+      await sleep(350);
+      try { return await this.click(target, { timeout: i < 2 ? 2500 : 8000, ...opts }); }
+      catch (e) { if (i >= 2) throw e; } // a smooth scroll may still have been running: reveal again
+    }
+  }
   async waitVisible(target, { timeout = 10000, ...opts } = {}) {
     const t0 = Date.now();
-    while (Date.now() - t0 < timeout) { const p = await this.locate(target, opts).catch(() => null); if (p) return p; await sleep(150); }
+    while (Date.now() - t0 < timeout) { if (this.dead) throw new Error("chrome closed"); const p = await this.locate(target, opts).catch(() => null); if (p) return p; await sleep(150); }
     throw new Error(`not visible: ${JSON.stringify(target)}`);
   }
 
@@ -244,6 +292,50 @@ export class Session {
         if (cs.overflow === 'visible' && el.scrollWidth > el.clientWidth + 2 && cs.whiteSpace === 'nowrap' && el.clientWidth > 0 && cs.textOverflow !== 'ellipsis' && r.right > innerWidth + 1)
           out.push('text off-screen: ' + t.slice(0, 40));
       }
+      // text drawn in (almost) the colour of the solid surface behind it
+      const rgba = (c) => { const m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null; const p = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; };
+      const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const leaves = [];
+      for (const el of document.querySelectorAll('body *')) {
+        if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'OPTION'].includes(el.tagName)) continue;
+        const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim(); if (!own) continue;
+        const r = el.getBoundingClientRect(); if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
+        let hidden = false; for (let o = el; o; o = o.parentElement) { const c = getComputedStyle(o); if (c.visibility === 'hidden' || c.display === 'none' || parseFloat(c.opacity) < 0.05 || o.getAttribute('aria-hidden') === 'true') { hidden = true; break; } }
+        if (hidden) continue;
+        const fg = rgba(getComputedStyle(el).color); if (!fg) continue;
+        // visible = topmost at one of a few points of its box (text under a dialog's scrim is not)
+        const pts = [[0.5, 0.5], [0.15, 0.5], [0.85, 0.5], [0.5, 0.2], [0.5, 0.8]];
+        const vis = pts.some(([fx, fy]) => { const t = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy); return !!t && (t === el || el.contains(t) || t.contains(el)); });
+        if (!vis) continue;
+        leaves.push({ el, r, own });
+        // the surface right behind the text's centre (siblings such as a sliding tab thumb count too)
+        let bg = null;
+        for (const o of document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2)) {
+          if (o !== el && el.contains(o)) continue;
+          const c = getComputedStyle(o);
+          if (o !== el && (c.backgroundImage !== 'none' || ['IMG', 'VIDEO', 'CANVAS', 'svg'].includes(o.tagName) || c.backdropFilter !== 'none')) break;
+          if (c.backgroundImage !== 'none') break;
+          const b = rgba(c.backgroundColor); if (b && b[3] > 0.9) { bg = b; break; }
+        }
+        if (bg && fg[3] > 0.5) { const L1 = lum(fg), L2 = lum(bg); const cr = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05); if (cr < 1.35) out.push('unreadable text: ' + own.slice(0, 40) + ' (' + getComputedStyle(el).color + ' on rgb(' + bg.slice(0, 3).join(',') + '))'); }
+
+      }
+      // two different texts drawn on top of each other
+      for (let i = 0; i < leaves.length; i++) for (let j = i + 1; j < leaves.length; j++) {
+        const a = leaves[i], b = leaves[j]; if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+        const w = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left), h = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+        if (w <= 0 || h <= 0) continue;
+        const small = Math.min(a.r.width * a.r.height, b.r.width * b.r.height);
+        if (w * h <= 0.3 * small) continue;
+        // content that scrolls under an opaque floating control (a FAB, a sticky button) is hidden, not overlapping
+        const cx = Math.max(a.r.left, b.r.left) + w / 2, cy = Math.max(a.r.top, b.r.top) + h / 2;
+        const list = document.elementsFromPoint(cx, cy);
+        const ia = list.findIndex(e => e === a.el || a.el.contains(e)), ib = list.findIndex(e => e === b.el || b.el.contains(e));
+        if (ia < 0 || ib < 0) continue;
+        const between = list.slice(Math.min(ia, ib), Math.max(ia, ib));
+        const occluded = between.some(e => { const c = getComputedStyle(e); const bg = rgba(c.backgroundColor); return c.backgroundImage !== 'none' || (bg && bg[3] > 0.9); });
+        if (!occluded) out.push('overlapping text: "' + a.own.slice(0, 30) + '" / "' + b.own.slice(0, 30) + '"');
+      }
       return out;
     })()`);
   }
@@ -268,9 +360,12 @@ export class Session {
   async step(name, fn, { shot = true } = {}) {
     const e0 = this.errors.length;
     const t0 = Date.now();
+    this.allowed = [];
     let ok = true, error;
+    if (this.dead) { const rec = { flow: this.flow, step: name, ok: false, error: "chrome closed", errs: [], ms: 0 }; this.results.push(rec); console.log(`  FAIL ${name}  — chrome closed`); return false; }
     try { await fn(); } catch (e) { ok = false; error = e.message; }
     await sleep(150);
+    this.allowed = [];
     const errs = this.errors.slice(e0).filter((e) => e.kind !== "http" || !/\/_next\/|__nextjs/.test(e.text));
     let file;
     if (shot) { try { file = await this.shot(name); } catch { /* page gone */ } }

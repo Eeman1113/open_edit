@@ -1,6 +1,7 @@
 // Video editor engine: decoded <video> (or the reversed frame list) → optional rotate stage → WebGL Renderer
 // (src/lib/gl/renderer: face passes, LUT filter) → preview canvas. Export replays the edited section into a full
-// resolution canvas and records it with MediaRecorder (canvas.captureStream + the original sound through WebAudio).
+// resolution canvas and records it with MediaRecorder (canvas.captureStream + the original sound and the optional
+// music track through WebAudio). The music starts with the edited section and loops; preview playback keeps it in step.
 import { Renderer } from "@/lib/gl/renderer";
 import { filterByKey, lutFor } from "@/lib/filters";
 import { FaceTracker, type FaceRenderParams, type StickerRuntime, type FaceData } from "@/lib/face";
@@ -98,6 +99,8 @@ export class VideoEngine {
   onPlayState?: (playing: boolean) => void;
   onFaces?: (faces: FaceData[]) => void;
   disposed = false;
+  /** Preview player of the music track (doc.music). */
+  private music: HTMLAudioElement | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement, readonly url: string, params: LiveParams) {
     this.params = params;
@@ -138,7 +141,34 @@ export class VideoEngine {
     if (faceNeeded(p) || p.track) void this.ensureTracker().catch(() => undefined);
     if (p.sticker) void this.renderer.face.preloadSticker(p.sticker).catch(() => undefined);
     if (doc.fx) void this.renderer.preloadEffects([doc.fx.id]);
+    this.syncMusicSource();
     if (this.pos < doc.start || this.pos > doc.end) this.seek(doc.start);
+  }
+
+  /** Output-time seconds of the current position (the music clock: 0 at the section start). */
+  private outTime() {
+    const { doc } = this.params;
+    return Math.max(0, (doc.reverse ? doc.end - this.pos : this.pos - doc.start) / doc.speed / 1000);
+  }
+  private syncMusicSource() {
+    const m = this.params.doc.music;
+    if (!m) { if (this.music) { this.music.pause(); this.music.removeAttribute("src"); this.music.load(); this.music = null; } return; }
+    if (!this.music || this.music.dataset.url !== m.url) {
+      this.music?.pause();
+      const a = new Audio();
+      a.crossOrigin = "anonymous"; a.loop = true; a.preload = "auto"; a.src = m.url; a.dataset.url = m.url;
+      this.music = a;
+      this.syncMusicTime();
+      if (this.playing) void a.play().catch(() => undefined);
+    }
+    this.music.volume = Math.min(1, Math.max(0, m.volume));
+  }
+  private syncMusicTime() {
+    const a = this.music;
+    if (!a) return;
+    const d = a.duration;
+    const t = Number.isFinite(d) && d > 0 ? this.outTime() % d : this.outTime();
+    if (Math.abs(a.currentTime - t) > 0.25) { try { a.currentTime = t; } catch { /* not seekable yet */ } }
   }
 
   seek(ms: number) {
@@ -146,6 +176,7 @@ export class VideoEngine {
     this.pos = Math.min(end, Math.max(start, ms));
     if (this.params.doc.reverse) this.revClock = end - this.pos + start;
     else if (Math.abs(this.video.currentTime * 1000 - this.pos) > 15) this.video.currentTime = this.pos / 1000;
+    this.syncMusicTime();
     this.onTime?.(this.pos);
   }
 
@@ -154,6 +185,7 @@ export class VideoEngine {
     this.playing = true;
     this.lastTick = performance.now();
     if (!this.params.doc.reverse) void this.video.play().catch(() => { this.video.muted = true; void this.video.play().catch(() => undefined); });
+    if (this.music) { this.syncMusicTime(); void this.music.play().catch(() => undefined); }
     this.onPlayState?.(true);
   }
 
@@ -161,6 +193,7 @@ export class VideoEngine {
     if (!this.playing) return;
     this.playing = false;
     this.video.pause();
+    this.music?.pause();
     this.onPlayState?.(false);
   }
 
@@ -174,7 +207,7 @@ export class VideoEngine {
       if (this.playing) {
         // reverse plays the section backwards: pos runs end → start at `speed`
         this.pos -= (now - this.lastTick) * doc.speed;
-        if (this.pos <= doc.start) this.pos = doc.end;
+        if (this.pos <= doc.start) { this.pos = doc.end; if (this.music) this.music.currentTime = 0; }
         this.onTime?.(this.pos);
       }
       this.lastTick = now;
@@ -186,7 +219,11 @@ export class VideoEngine {
     }
     if (this.playing) {
       const t = this.video.currentTime * 1000;
-      if (t >= doc.end - 5 || this.video.ended) { this.video.currentTime = doc.start / 1000; if (this.video.paused) void this.video.play().catch(() => undefined); }
+      if (t >= doc.end - 5 || this.video.ended) {
+        this.video.currentTime = doc.start / 1000;
+        if (this.video.paused) void this.video.play().catch(() => undefined);
+        if (this.music) this.music.currentTime = 0;
+      }
       this.pos = Math.min(doc.end, Math.max(doc.start, t));
       this.onTime?.(this.pos);
     }
@@ -234,6 +271,7 @@ export class VideoEngine {
     this.video.pause();
     this.video.removeAttribute("src");
     this.video.load();
+    if (this.music) { this.music.pause(); this.music.removeAttribute("src"); this.music.load(); this.music = null; }
     this.reverse?.frames.forEach((f) => f.close());
     this.tracker?.close();
     this.renderer.dispose();
@@ -271,15 +309,27 @@ export class VideoEngine {
     await new Promise<void>((res, rej) => { v.onloadeddata = () => res(); v.onerror = () => rej(new Error("video")); });
     let ac: AudioContext | null = null;
     const withSound = !doc.muted && !doc.reverse;
-    if (withSound) {
+    const music = doc.music ? new Audio() : null;
+    if (music && doc.music) {
+      music.crossOrigin = "anonymous"; music.loop = true; music.preload = "auto"; music.src = doc.music.url;
+      await new Promise<void>((res) => { music.oncanplay = () => res(); music.onerror = () => res(); window.setTimeout(res, 8000); });
+    }
+    if (withSound || music) {
       try {
         ac = new AudioContext();
-        const srcNode = ac.createMediaElementSource(v);
         const dest = ac.createMediaStreamDestination();
-        srcNode.connect(dest);
+        if (withSound) ac.createMediaElementSource(v).connect(dest);
+        if (music && doc.music) {
+          const gain = ac.createGain();
+          gain.gain.value = Math.min(1, Math.max(0, doc.music.volume));
+          ac.createMediaElementSource(music).connect(gain).connect(dest);
+        }
         dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+        await ac.resume().catch(() => undefined);
       } catch { ac = null; }
     }
+    // sound off (or reversed): the source plays silently; only the graph above reaches the file
+    if (!withSound) v.muted = true;
     const types = ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
     const mimeType = types.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
     const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: Math.min(20_000_000, Math.round(ow * oh * 30 * 0.15)) });
@@ -293,6 +343,7 @@ export class VideoEngine {
         const fr = this.reverse;
         frame(fr.frames[0], fr.frames[0].width, fr.frames[0].height, 0);
         rec.start(250);
+        if (music) await music.play().catch(() => undefined);
         const t0 = performance.now();
         await new Promise<void>((res) => {
           const step = () => {
@@ -313,6 +364,7 @@ export class VideoEngine {
         frame(v, sw, sh, 0);
         rec.start(250);
         await v.play();
+        if (music) await music.play().catch(() => undefined);
         await new Promise<void>((res) => {
           const vv = v as HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number };
           const step = () => {
@@ -329,8 +381,10 @@ export class VideoEngine {
         v.pause();
       }
     } finally {
+      music?.pause();
       if (rec.state !== "inactive") rec.stop();
       await stopped;
+      if (music) { music.removeAttribute("src"); music.load(); }
       stream.getTracks().forEach((t) => t.stop());
       void ac?.close();
       v.removeAttribute("src"); v.load();

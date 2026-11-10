@@ -50,3 +50,6 @@ next-env.d.ts
 
 # keep the documented template
 !.env.example
+
+# Build-time snapshots of the content API for static hosting (scripts/gen-static-api.mjs)
+/public/api-static/

@@ -1,4 +1,4 @@
-import { importToGallery, nthThumb, TEST_PHOTO, GALLERY_DB } from "../h.mjs";
+import { importToGallery, nthThumb, TEST_PHOTO, GALLERY_DB, audit } from "../h.mjs";
 export default async function flowGallery(s) {
   await s.step("seed-import", async () => {
     // deterministic library: drop what earlier flows saved, then the dev sample set (seeds only when empty) + the test photo
@@ -46,12 +46,27 @@ export default async function flowGallery(s) {
   });
   await s.step("collage", async () => {
     await s.waitFor(`document.querySelectorAll('canvas, img').length > 0`, { timeout: 8000 });
-    const a = await s.visualAudit(); if (a.length) throw new Error("visual: " + a.join("; "));
+    await s.sleep(1500);
+    for (const t of ["Stack", "Border", "Layout"]) await s.tap(t, { settle: 900 });
+    await audit(s);
   });
   await s.step("collage-save", async () => {
-    const save = (await s.locate("Save", { exact: false })) ?? (await s.locate({ label: "Save" }, { exact: false }));
-    if (!save) throw new Error("no save button");
-    await s.tapAt(save.x, save.y); await s.sleep(3000);
-    await s.waitFor(`/Saved|saved/.test(document.body.innerText) || location.pathname !== '/collage'`, { timeout: 10000, msg: "collage saved" });
+    await s.click("Save", { settle: 2000 });
+    await s.waitVisible("Your collage is in the gallery.", { timeout: 20000 });
+    await s.waitFor(`(() => { const i = document.querySelector('img[alt="Saved result"]'); return i && i.complete && i.naturalWidth > 100; })()`, { timeout: 8000, msg: "collage image" });
+    await audit(s, "saved");
+    await s.click("Open gallery", { settle: 1500 });
+    await s.waitFor(`location.pathname === '/gallery'`, { timeout: 6000, msg: "gallery" });
+  });
+  await s.step("viewer-delete", async () => {
+    const before = await s.ev(`[...document.images].filter(i => i.src.startsWith('blob:') && i.getBoundingClientRect().width > 50).length`);
+    await s.click({ label: "View full screen" }, { settle: 1200 });
+    await s.click("Delete", { settle: 800 });
+    await s.waitFor(`[...document.querySelectorAll('[role=dialog], [role=alertdialog]')].length > 0`, { timeout: 3000, msg: "delete confirmation" });
+    await audit(s, "delete dialog");
+    const ok = await s.ev(`[...document.querySelectorAll('[role=dialog] button, [role=alertdialog] button')].map(b => b.innerText.trim()).find(t => /^Delete/.test(t))`);
+    await s.click(ok, { settle: 1500 });
+    if (await s.exists({ label: "Back" })) await s.click({ label: "Back" }, { settle: 1000 });
+    await s.waitFor(`[...document.images].filter(i => i.src.startsWith('blob:') && i.getBoundingClientRect().width > 50).length === ${before} - 1`, { timeout: 5000, msg: "one item fewer" });
   });
 }

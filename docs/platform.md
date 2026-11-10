@@ -29,6 +29,8 @@ browser ──/api/*──▶ route handler ──▶ catalogHandler (session, r
 | `src/lib/content/types.ts` | Response shapes shared by server and client. |
 | `src/lib/content/validate.ts` | Validation / stripping of provider data (client-safe). |
 | `scripts/gen-music.mjs` | Generates the built-in music library: 8 original loops synthesised in Node (no samples), WAV → MP3 with ffmpeg, manifest kind `music`. |
+| `src/lib/content/api.ts` | `apiJson()`: every client `/api/*` GET; falls back to the build-time snapshots in `public/api-static` (static hosting, see `docs/deploy.md`). |
+| `scripts/gen-static-api.mjs` | Writes those snapshots from the local catalogue. |
 | `src/lib/content/music.ts` | Client loader used by every music picker: `/api/music`, else the pack's `music` kind. |
 | `scripts/check-client-secrets.mjs` | Fails if server-only values or modules appear in client chunks. |
 
@@ -205,11 +207,9 @@ un-namespaced keys written by pre-release builds. Values are not carried over.
 ## End-to-end tests
 
 `scripts/e2e` drives one headless Chrome over the DevTools protocol (`npm run e2e [flow…]`, server at `E2E_BASE`,
-default `http://localhost:3700`). Shared helpers are in `scripts/e2e/h.mjs`: `window.__oeShoot()` (dev-only camera
-hook), `navTab(href)`, `reviewUp`, `TEST_PHOTO` / `TEST_VIDEO` (`E2E_PHOTO` / `E2E_VIDEO`, defaulting to the pack's
-generated sample media), `GALLERY_DB`. Scratch files and screenshots go to `E2E_SCRATCH` / `E2E_OUT` (default under
-the OS temp folder). Flows 01–10, 13 and 14 target the current UI; the editor-internal steps of flows 11, 12, 15 and
-16 still use pre-reskin labels and need re-baselining once the photo and video editors are restyled.
+default `http://localhost:3000`). Nineteen flows cover every screen of the current UI, the `/api/*` routes and the
+static `/api-static` fallback. How to run them, the test media they use and the latest results are in
+[testing.md](testing.md).
 
 ## External credentials
 

@@ -1,6 +1,6 @@
 "use client";
 
-// First-visit hint pointing at the gallery's Collage button.
+// First-visit hint pointing at the gallery's Collage button. Tapping it dismisses it.
 import type { RefObject } from "react";
 import { useLayoutEffect, useState } from "react";
 
