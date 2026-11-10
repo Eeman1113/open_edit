@@ -24,7 +24,7 @@ listAssets("collage");                    // ["grid-2", ..., "grid-9"]
   `path` is relative to the pack folder (folders end with `/`). `meta` carries data the consumer needs (names,
   default strengths, sticker definitions, layout rects, font families...).
 - **Kinds** (open-ended, `AssetKind`): `filter`, `filter-thumb`, `table`, `makeup`, `sticker`, `sticker-thumb`,
-  `brush`, `collage`, `feed`, `video`, `font`, `root`, plus the design system's `icon`, `brand`, `illustration`,
+  `brush`, `collage`, `feed`, `video`, `font`, `music`, `root`, plus the design system's `icon`, `brand`, `illustration`,
   `theme`. A pack may add kinds; code that does not know a kind never asks for it.
 - **Choosing a pack**: `NEXT_PUBLIC_ASSET_PACK` (default `open`). The open pack's manifest is bundled, so lookups
   are synchronous from the first render. Another pack's manifest is fetched at startup and takes over; ids it does
@@ -51,6 +51,7 @@ plain-data TypeScript catalogues in `src/data` directly (Node 24 strips the type
 | `gen-brushes.mjs` | `brushes/<id>.png` | `brush` |
 | `gen-collage.mjs` | `collage/grid-<n>.json` | `collage` |
 | `gen-fonts.mjs` | `fonts/<id>.woff2`, `fonts/<id>-OFL.txt` | `font` |
+| `gen-music.mjs` | `music/<id>.mp3` (8 synthesised loops; WAV if ffmpeg is missing) | `music` |
 | `gen-feed.mjs` | `feed/*.svg`, `videos/clip-*.mp4` / `.jpg`, plus `src/data/home.json`, `src/data/discover.json` | `feed`, `video` |
 
 Shared helpers: `scripts/gen-lib/png.mjs` (dependency-free PNG encoder), `scripts/gen-lib/grade.mjs` (colour-grade

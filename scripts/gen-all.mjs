@@ -8,9 +8,9 @@ import { generate as brushes } from "./gen-brushes.mjs";
 import { generate as collage } from "./gen-collage.mjs";
 import { generate as fonts } from "./gen-fonts.mjs";
 import { generate as feed } from "./gen-feed.mjs";
-import { generate as content } from "./gen-content.mjs";
+import { generate as music } from "./gen-music.mjs";
 
-const steps = [["luts", luts], ["stickers", stickers], ["brushes", brushes], ["collage", collage], ["fonts", fonts], ["feed", feed], ["content", content]];
+const steps = [["luts", luts], ["stickers", stickers], ["brushes", brushes], ["collage", collage], ["fonts", fonts], ["feed", feed], ["music", music]];
 for (const [name, run] of steps) {
   const t = Date.now();
   const r = await run();

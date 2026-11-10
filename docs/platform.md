@@ -28,7 +28,8 @@ browser ──/api/*──▶ route handler ──▶ catalogHandler (session, r
 | `src/server/providers/local.ts` | Built-in catalogue from `public/packs/open` and `src/data`. |
 | `src/lib/content/types.ts` | Response shapes shared by server and client. |
 | `src/lib/content/validate.ts` | Validation / stripping of provider data (client-safe). |
-| `scripts/gen-content.mjs` | Generates the built-in music library (original synthesised loops). |
+| `scripts/gen-music.mjs` | Generates the built-in music library: 8 original loops synthesised in Node (no samples), WAV → MP3 with ffmpeg, manifest kind `music`. |
+| `src/lib/content/music.ts` | Client loader used by every music picker: `/api/music`, else the pack's `music` kind. |
 | `scripts/check-client-secrets.mjs` | Fails if server-only values or modules appear in client chunks. |
 
 Everything under `src/server/` imports `server-only`, so importing it from a client component breaks the build.
@@ -40,7 +41,7 @@ All are `GET`, return JSON and accept `q` (search, ≤ 64 characters), `limit` (
 
 | Endpoint | Response | Used by | Built-in fallback |
 | --- | --- | --- | --- |
-| `/api/music` | `{ tracks: Track[] }` | camera and video music picker | 6 original synthesised loops (`public/packs/open/content/music/`) |
+| `/api/music` | `{ tracks: Track[] }` | camera Music sheet, capture review (Add music), video editor Music tab | 8 original synthesised loops (`public/packs/open/music/*.mp3`, kind `music`) |
 | `/api/aistyle` | `{ styles: ArtStyle[] }` | Art styles (`/aistyle`) | 10 styles (`src/data/content/artStyles.ts`) |
 | `/api/looks/<kind>` | `{ items: CatalogItem[] }` | look creator (`/lens`), its search (`store`), templates (`templates`) | stickers, filters, face styles, makeup, brushes, fonts, collage templates, music, backdrops, adjustments, cutout types |
 | `/api/stickers` | `StickerCategory[]` | effect panels (camera, photo editor, video editor) | the pack's effects grouped into Cute, Face paint, Eyes, Beauty, Scenes |

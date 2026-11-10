@@ -1,17 +1,18 @@
 #!/usr/bin/env node
-// Built-in content catalogue of the open pack: the music library the camera and video editor offer when no music
-// provider is configured. Every track is synthesised here from scratch (additive pads, Karplus-Strong plucks, FM
-// bells, sine bass and noise percussion, all driven by a seeded PRNG) and encoded to AAC with ffmpeg. No samples or
+// Built-in music library of the open pack: the tracks the camera, the capture review and the video editor offer
+// when no music provider is configured (served by /api/music). Every loop is synthesised here from scratch
+// (additive pads, Karplus-Strong plucks, FM bells, sine bass and noise percussion, all driven by a seeded PRNG),
+// rendered to WAV and encoded to MP3 with ffmpeg when it is available (otherwise the WAV is kept). No samples or
 // recordings are used, so the audio is original and covered by the pack's MIT licence.
 //
-//   content/music.json           { tracks: [{ id, title, artist, url, duration, mood, bpm }] }  (url relative to content/)
-//   content/music/<id>.m4a       ~20 s loops, mono 22.05 kHz AAC
+//   music/<id>.mp3 (or .wav)    ~20 s loops, mono 22.05 kHz
+//   manifest kind "music"       { <id>: { path, type, license, meta: { title, artist, mood, bpm, duration } } }
 //
-// Run: node scripts/gen-content.mjs   (keeps the existing audio when ffmpeg is missing)
+// Run: node scripts/gen-music.mjs
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { PACK_DIR, rng, runAsMain, updateManifest, writePack } from "./gen-lib/pack.mjs";
+import { PACK_DIR, readManifest, rng, runAsMain, updateManifest, writePack } from "./gen-lib/pack.mjs";
 
 const SR = 22050;
 const midiHz = (m) => 440 * 2 ** ((m - 69) / 12);
@@ -33,6 +34,10 @@ const TRACKS = [
     prog: [[0, "add9"], [5, "maj7"], [3, "maj7"], [10, "add9"]], parts: ["pad", "bell", "bass"], swing: 0 },
   { id: "pocket-beat", title: "Pocket Beat", mood: "Chill", bpm: 88, key: 53, bars: 8, seed: 67,
     prog: [[0, "m7"], [5, "m7"], [10, "dom7"], [3, "maj7"]], parts: ["pad", "kick", "snare", "hat", "bass", "bell"], swing: 0.16 },
+  { id: "lantern-walk", title: "Lantern Walk", mood: "Mellow", bpm: 76, key: 58, bars: 6, seed: 79,
+    prog: [[0, "add9"], [9, "m7"], [5, "maj7"], [7, "add9"]], parts: ["pad", "pluck", "bass", "shaker"], swing: 0.1 },
+  { id: "kite-day", title: "Kite Day", mood: "Bright", bpm: 128, key: 62, bars: 12, seed: 83,
+    prog: [[0, "maj"], [7, "maj"], [9, "min"], [5, "maj"]], parts: ["arp", "bell", "kick", "clap", "hat", "bass8"], swing: 0 },
 ];
 
 const QUALITY = {
@@ -160,28 +165,43 @@ function render(t) {
   return { pcm: out, duration: dur };
 }
 
-function encode(pcm, file, title) {
-  const buf = Buffer.alloc(pcm.length * 2);
-  for (let i = 0; i < pcm.length; i++) buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, pcm[i])) * 32767), i * 2);
-  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "s16le", "-ar", String(SR), "-ac", "1", "-i", "pipe:0",
-    "-c:a", "aac", "-b:a", "64k", "-movflags", "+faststart", "-map_metadata", "-1", "-fflags", "+bitexact",
-    "-metadata", `title=${title}`, "-metadata", "artist=Open_Edit", file], { input: buf });
+/** 16-bit PCM WAV file. */
+function wav(pcm) {
+  const data = Buffer.alloc(pcm.length * 2);
+  for (let i = 0; i < pcm.length; i++) data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, pcm[i])) * 32767), i * 2);
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0); h.writeUInt32LE(36 + data.length, 4); h.write("WAVE", 8);
+  h.write("fmt ", 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(SR, 24); h.writeUInt32LE(SR * 2, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
+  h.write("data", 36); h.writeUInt32LE(data.length, 40);
+  return Buffer.concat([h, data]);
 }
 
+const hasFfmpeg = () => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } };
+
 export async function generate() {
-  let ffmpeg = true;
-  try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); } catch { ffmpeg = false; console.warn("gen-content: ffmpeg not found, keeping existing audio"); }
-  const tracks = [];
+  const ffmpeg = hasFfmpeg();
+  if (!ffmpeg) console.warn("gen-music: ffmpeg not found, writing WAV files");
+  rmSync(join(PACK_DIR, "music"), { recursive: true, force: true });
+  const entries = {};
   for (const t of TRACKS) {
     const { pcm, duration } = render(t);
-    const rel = `content/music/${t.id}.m4a`;
-    if (ffmpeg) { writePack(rel, ""); encode(pcm, join(PACK_DIR, rel), t.title); }
-    else if (!existsSync(join(PACK_DIR, rel))) continue;
-    tracks.push({ id: t.id, title: t.title, artist: "Open_Edit", url: `music/${t.id}.m4a`, duration: Math.round(duration * 10) / 10, mood: t.mood, bpm: t.bpm });
+    const wavRel = writePack(`music/${t.id}.wav`, wav(pcm));
+    let rel = wavRel, type = "audio/wav";
+    if (ffmpeg) {
+      rel = `music/${t.id}.mp3`; type = "audio/mpeg";
+      execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", join(PACK_DIR, wavRel), "-c:a", "libmp3lame", "-b:a", "96k",
+        "-map_metadata", "-1", "-fflags", "+bitexact", "-metadata", `title=${t.title}`, "-metadata", "artist=Open_Edit", join(PACK_DIR, rel)]);
+      rmSync(join(PACK_DIR, wavRel));
+    }
+    entries[t.id] = { path: rel, type, license: "MIT", meta: { title: t.title, artist: "Open_Edit", mood: t.mood, bpm: t.bpm, duration: Math.round(duration * 10) / 10 } };
   }
-  writePack("content/music.json", JSON.stringify({ tracks }, null, 1) + "\n");
-  updateManifest({ content: { music: { path: "content/music.json", type: "application/json", license: "MIT", meta: { tracks: tracks.length } } } }, { merge: true });
-  return { tracks: tracks.length };
+  // the music library moved from the "content" kind to its own kind
+  const m = readManifest();
+  if (m.kinds?.content) { delete m.kinds.content.music; if (!Object.keys(m.kinds.content).length) delete m.kinds.content; writePack("manifest.json", JSON.stringify(m, null, 1) + "\n"); }
+  rmSync(join(PACK_DIR, "content"), { recursive: true, force: true });
+  updateManifest({ music: entries });
+  return { tracks: Object.keys(entries).length, format: ffmpeg ? "mp3" : "wav" };
 }
 
 if (runAsMain(import.meta.url)) console.log(await generate());

@@ -18,6 +18,7 @@ export type AssetKind =
   | "feed"            // demo feed artwork (home / discover)
   | "video"           // sample video clips (meta.poster = poster image id)
   | "font"            // OFL fonts (meta.family, meta.weight)
+  | "music"           // built-in music loops (meta.title, artist, mood, bpm, duration)
   | "icon"            // UI icons (design system)
   | "brand"           // logo and brand marks (design system)
   | "root"            // folder roots, e.g. root/stickers

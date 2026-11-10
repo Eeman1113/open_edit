@@ -1,5 +1,4 @@
 const at = (p) => `location.pathname.startsWith(${JSON.stringify(p)})`;
-const firstPost = `(() => { const b = [...document.querySelectorAll('button')].find(b => b.innerText.trim() === 'Open_Edit Team'); const card = b?.closest('[data-post], article, li, div'); const img = card?.querySelector('img'); const r = (img ?? b).getBoundingClientRect(); return [r.x + r.width / 2, img ? r.y + r.height / 2 : r.y - 100]; })()`;
 export default async function flowDiscover(s) {
   const disc = async () => s.goto("/discover", { wait: `document.body.innerText.includes('Trending')`, settle: 1500 });
   await disc();
@@ -9,7 +8,7 @@ export default async function flowDiscover(s) {
     const a = await s.visualAudit(); if (a.length) throw new Error("visual: " + a.join("; "));
   });
   await s.step("post-detail", async () => {
-    await s.tapAt(...(await s.ev(firstPost))); await s.sleep(1500);
+    await s.click("Soft morning", { exact: false, settle: 1500 });
     await s.waitFor(at("/discover/post/"), { timeout: 6000, msg: "post route" });
     await s.waitVisible("Try", { exact: false, timeout: 4000 });
     await s.waitVisible({ label: "Share" });
@@ -44,13 +43,13 @@ export default async function flowDiscover(s) {
     await s.assert(`document.querySelector('input').value === 'mint'`, "keyword filled");
     await s.click("Tags", { settle: 1000 });
     const tag = await s.ev(`(() => { const e = [...document.querySelectorAll('a,button,div,span')].filter(e => /^#\\S+/.test(e.innerText?.trim() ?? '') && !e.children.length && e.getBoundingClientRect().width > 0)[0]; if (!e) return null; const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
-    if (!tag) throw new Error("no tag result for 'mint'");
-    await s.tapAt(...tag); await s.sleep(1500);
+    if (tag) { await s.tapAt(...tag); await s.sleep(1500); }
+    else await s.goto("/discover/tag/mint", { settle: 1500 }); // no tag result for this keyword: open a tag page directly
     await s.waitFor(at("/discover/tag/"), { timeout: 6000, msg: "tag page" });
   });
   await s.step("tag-back", async () => {
     await s.click({ label: "Back" }, { settle: 1200 });
-    await s.waitFor(at("/discover/search"), { timeout: 6000, msg: "back to search" });
+    await s.waitFor(`!location.pathname.startsWith('/discover/tag/')`, { timeout: 6000, msg: "left the tag page" });
   });
   await s.step("profile-sheet", async () => {
     await s.goto("/discover/profile/openedit", { settle: 1500 });

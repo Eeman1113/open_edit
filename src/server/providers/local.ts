@@ -12,7 +12,6 @@ import { MAKEUP_CATEGORIES } from "@/data/camera/beauty";
 import home from "@/data/home.json";
 import discover from "@/data/discover.json";
 import manifest from "../../../public/packs/open/manifest.json";
-import music from "../../../public/packs/open/content/music.json";
 import type { CatalogQuery, ContentProvider } from "./types";
 
 interface Entry { path: string; meta?: Record<string, unknown> }
@@ -24,7 +23,11 @@ const entries = (kind: string) => Object.entries(KINDS[kind] ?? {});
 
 // ---------------------------------------------------------------- catalogues
 
-const TRACKS: Track[] = (music as { tracks: Track[] }).tracks.map((t) => ({ ...t, url: packUrl(`content/${t.url}`) }));
+interface MusicMeta { title: string; artist?: string; mood?: string; bpm?: number; duration?: number }
+const TRACKS: Track[] = entries("music").map(([id, e]) => {
+  const m = (e.meta ?? {}) as unknown as MusicMeta;
+  return { id, title: m.title ?? id, artist: m.artist, mood: m.mood, bpm: m.bpm, duration: m.duration, url: packUrl(e.path) };
+});
 
 interface StickerMeta { id: number; name: string; def?: { items?: { drawType?: string }[] } }
 const STICKERS = entries("sticker").map(([slug, e]) => {

@@ -2,7 +2,6 @@ import { openCamera, textOn, camReady } from "../h.mjs";
 
 const label = (prefix) => `[...document.querySelectorAll('button[aria-label]')].map(b => b.getAttribute('aria-label')).find(l => l.startsWith(${JSON.stringify(prefix)})) ?? ''`;
 const checked = (name) => `document.querySelector('[role=switch][aria-label=${JSON.stringify(name)}]')?.getAttribute('aria-checked') ?? ''`;
-const PREVIEW = [195, 330]; // empty preview area (tap closes panels)
 
 export default async function flowCameraControls(s) {
   await openCamera(s, { fresh: true });
@@ -15,7 +14,7 @@ export default async function flowCameraControls(s) {
     const after = await s.ev(checked("Auto-save"));
     if (before === after) throw new Error(`Auto-save did not toggle (${before})`);
     await s.click("Auto-save", { settle: 500 });
-    await s.tapAt(...PREVIEW); await s.sleep(700);
+    await s.click({ label: "More options" }, { settle: 700 }); // toggles the panel closed
     await s.waitFor(`!${textOn("Camera settings")}`, { timeout: 3000, msg: "more closed" });
   });
 
@@ -85,8 +84,8 @@ export default async function flowCameraControls(s) {
     await s.click("Done", { settle: 800 });
   });
   await s.step("filter-original-close", async () => {
-    if (!(await s.exists("Original"))) await s.click("Filters");
-    await s.click("Original", { settle: 800 });
+    if (!(await s.exists({ label: "Close filters" }))) await s.click("Filters", { settle: 800 });
+    if (await s.exists("Original")) await s.click("Original", { settle: 800 });
     await s.click({ label: "Close filters" }, { settle: 800 });
     await s.waitVisible("Beauty", { timeout: 3000 });
   });

@@ -1,31 +1,15 @@
 "use client";
 
-// Music picker (camera toolbar and the confirm screen for videos). Tracks come from the content API
-// (/api/music, which reads its provider from server-side env) and fall back to the asset pack's built-in catalog
-// (kind "content", id "music": a JSON list). Tap a track to preview it, then "Use".
+// Music picker (camera toolbar, the capture review for videos and the video editor). Tracks come from the content
+// API (/api/music, which reads its provider from server-side env) and fall back to the asset pack's built-in loops
+// (kind "music"). Tap a track to preview it, then "Use".
 import { useEffect, useRef, useState } from "react";
 import { Button, EmptyState, Icon, Sheet, Spinner, cx } from "@/components/ui";
-import { getAsset, hasAsset } from "@/lib/assets";
-import { asset } from "@/lib/base";
+import { loadMusic } from "@/lib/content/music";
 import type { Track } from "@/lib/content/types";
 import { loadPref, savePref } from "./prefs";
 
 export type { Track } from "@/lib/content/types";
-
-async function loadCatalog(): Promise<Track[]> {
-  const tryJson = async (url: string) => {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(String(r.status));
-    const j = (await r.json()) as { tracks?: Track[] } | Track[];
-    const list = Array.isArray(j) ? j : j.tracks ?? [];
-    // pack catalogues list files relative to the JSON file
-    const base = new URL(url, window.location.href);
-    return list.map((t) => ({ ...t, url: new URL(t.url, base).href }));
-  };
-  try { return await tryJson(asset("/api/music")); } catch { /* no API (static hosting) */ }
-  if (hasAsset("content", "music")) return tryJson(getAsset("content", "music"));
-  return [];
-}
 
 const mmss = (s?: number) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "");
 
@@ -40,7 +24,7 @@ export function MusicList({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     let alive = true;
-    loadCatalog().then((t) => { if (alive) { setTracks(t); setPhase("ready"); } }, () => alive && setPhase("error"));
+    loadMusic(attempt > 0).then((t) => { if (alive) { setTracks(t); setPhase("ready"); } }, () => alive && setPhase("error"));
     return () => { alive = false; };
   }, [attempt]);
   useEffect(() => () => audio.current?.pause(), []);

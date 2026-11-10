@@ -9,7 +9,9 @@ export default async function flowHome(s) {
     const a = await s.visualAudit(); if (a.length) throw new Error("visual: " + a.join("; "));
   });
   await s.step("shortcut-camera", async () => {
-    await s.click({ sel: 'a[href="/"]:not(nav a)' }, { settle: 1500 });
+    const p = await s.ev(`(() => { const a = [...document.querySelectorAll('a')].find(a => !a.closest('nav[aria-label="Main"]') && (a.getAttribute('aria-label') ?? a.innerText.trim()) === 'Camera'); if (!a) return null; const r = a.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+    if (!p) throw new Error("no camera shortcut");
+    await s.tapAt(...p); await s.sleep(1500);
     await s.waitFor(`location.pathname === '/'`, { timeout: 6000 });
     await openCamera(s);
   });
@@ -40,7 +42,7 @@ export default async function flowHome(s) {
   });
   await s.step("filter-item", async () => {
     await s.ev(scrollTo(500)); await s.sleep(700);
-    await s.click("Peach", { exact: false, settle: 2500 });
+    await s.click("Natural", { exact: false, settle: 2500 });
     await s.waitFor(`location.pathname === '/' && location.search.includes('filter=')`, { timeout: 6000, msg: "camera with filter" });
     await openCamera(s);
     await s.waitFor(`document.body.innerText.includes('Original')`, { timeout: 6000, msg: "filter panel open" });

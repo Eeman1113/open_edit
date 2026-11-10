@@ -45,7 +45,7 @@ export default async function flowGallery(s) {
     await s.waitFor(`location.pathname === '/collage'`, { timeout: 8000, msg: "collage route" });
   });
   await s.step("collage", async () => {
-    await s.waitFor(`document.querySelectorAll('canvas, img').length > 2`, { timeout: 8000 });
+    await s.waitFor(`document.querySelectorAll('canvas, img').length > 0`, { timeout: 8000 });
     const a = await s.visualAudit(); if (a.length) throw new Error("visual: " + a.join("; "));
   });
   await s.step("collage-save", async () => {

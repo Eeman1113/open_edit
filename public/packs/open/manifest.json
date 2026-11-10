@@ -4545,13 +4545,121 @@
     }
    }
   },
-  "content": {
-   "music": {
-    "path": "content/music.json",
-    "type": "application/json",
+  "fx": {
+   "lightleak": {
+    "path": "effects/lightleak.png",
+    "meta": {
+     "repeat": false
+    }
+   },
+   "dust": {
+    "path": "effects/dust.png",
+    "meta": {
+     "repeat": true
+    }
+   },
+   "bokeh": {
+    "path": "effects/bokeh.png",
+    "meta": {
+     "repeat": false
+    }
+   }
+  },
+  "music": {
+   "morning-light": {
+    "path": "music/morning-light.mp3",
+    "type": "audio/mpeg",
     "license": "MIT",
     "meta": {
-     "tracks": 6
+     "title": "Morning Light",
+     "artist": "Open_Edit",
+     "mood": "Calm",
+     "bpm": 84,
+     "duration": 22.9
+    }
+   },
+   "neon-drive": {
+    "path": "music/neon-drive.mp3",
+    "type": "audio/mpeg",
+    "license": "MIT",
+    "meta": {
+     "title": "Neon Drive",
+     "artist": "Open_Edit",
+     "mood": "Energetic",
+     "bpm": 112,
+     "duration": 21.4
+    }
+   },
+   "paper-boats": {
+    "path": "music/paper-boats.mp3",
+    "type": "audio/mpeg",
+    "license": "MIT",
+    "meta": {
+     "title": "Paper Boats",
+     "artist": "Open_Edit",
+     "mood": "Warm",
+     "bpm": 96,
+     "duration": 20
+    }
+   },
+   "sunday-market": {
+    "path": "music/sunday-market.mp3",
+    "type": "audio/mpeg",
+    "license": "MIT",
+    "meta": {
+     "title": "Sunday Market",
+     "artist": "Open_Edit",
+     "mood": "Upbeat",
+     "bpm": 122,
+     "duration": 19.7
+    }
+   },
+   "slow-tide": {
+    "path": "music/slow-tide.mp3",
+    "type": "audio/mpeg",
+    "license": "MIT",
+    "meta": {
+     "title": "Slow Tide",
+     "artist": "Open_Edit",
+     "mood": "Dreamy",
+     "bpm": 68,
+     "duration": 21.2
+    }
+   },
+   "pocket-beat": {
+    "path": "music/pocket-beat.mp3",
+    "type": "audio/mpeg",
+    "license": "MIT",
+    "meta": {
+     "title": "Pocket Beat",
+     "artist": "Open_Edit",
+     "mood": "Chill",
+     "bpm": 88,
+     "duration": 21.8
+    }
+   },
+   "lantern-walk": {
+    "path": "music/lantern-walk.mp3",
+    "type": "audio/mpeg",
+    "license": "MIT",
+    "meta": {
+     "title": "Lantern Walk",
+     "artist": "Open_Edit",
+     "mood": "Mellow",
+     "bpm": 76,
+     "duration": 18.9
+    }
+   },
+   "kite-day": {
+    "path": "music/kite-day.mp3",
+    "type": "audio/mpeg",
+    "license": "MIT",
+    "meta": {
+     "title": "Kite Day",
+     "artist": "Open_Edit",
+     "mood": "Bright",
+     "bpm": 128,
+     "duration": 22.5
     }
    }
   }
