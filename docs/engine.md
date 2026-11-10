@@ -153,3 +153,6 @@ Built on the MediaPipe Face Landmarker (478 landmarks, blendshapes) and the face
   sticker panel through `src/data/camera/stickers.ts`.
 - Custom pack: create `public/packs/<id>/manifest.json` with the kinds / ids to override, set
   `NEXT_PUBLIC_ASSET_PACK=<id>`. Anything not listed falls back to the open pack.
+
+### Effects (gen-effects.mjs)
+`scripts/gen-effects.mjs` generates the overlay textures (light leak, dust, bokeh) used by the photo and video Effects tabs. They are registered under the `fx` asset kind. The effect shaders live in `src/lib/gl/effects.ts`.

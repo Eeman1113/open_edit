@@ -56,7 +56,7 @@ export function CameraSettings() {
           <div className="px-4 py-3">
             <Tabs look="segment" items={[{ id: "fast", label: "Fast" }, { id: "hi", label: "High resolution" }]} value={hiRes ? "hi" : "fast"} onChange={(v) => setHiRes(v === "hi")} />
           </div>
-          <ListRow icon="mirror" title="Mirror front camera" subtitle="Save selfies the way you see them." trailing={<Switch checked={mirror} onChange={setMirror} label="Mirror front camera" />} />
+          <ListRow icon="flip-h" title="Mirror front camera" subtitle="Save selfies the way you see them." trailing={<Switch checked={mirror} onChange={setMirror} label="Mirror front camera" />} />
           <ListRow icon="beauty" title="Smooth blemishes" trailing={<Switch checked={blemish} onChange={setBlemish} label="Smooth blemishes" />} />
           <ListRow icon="grid" title="Grid lines" trailing={<Switch checked={grid} onChange={setGrid} label="Grid lines" />} />
           <ListRow icon="globe" title="Add location to photos" trailing={<Switch checked={location} onChange={toggleLocation} label="Add location to photos" />} />

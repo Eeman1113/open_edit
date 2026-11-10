@@ -22,8 +22,8 @@ function faceNeeded(p: LiveParams) {
   return !p.original && (!!p.sticker || reshapeActive(p.doc.reshape) || p.doc.retouch.length > 0);
 }
 
-/** Render params for one frame (filter LUT + face passes). */
-function renderParams(p: LiveParams, faces: FaceData[]) {
+/** Render params for one frame (filter LUT + face passes + effect). `time` = seconds into the clip (animated effects). */
+function renderParams(p: LiveParams, faces: FaceData[], time: number) {
   const { doc } = p;
   const f = filterByKey(doc.filter.key);
   const lut = !p.original && f ? lutFor(f, true, true) : undefined;
@@ -38,7 +38,8 @@ function renderParams(p: LiveParams, faces: FaceData[]) {
       stickers: p.sticker ? [p.sticker] : [],
     };
   }
-  return { lut, intensity: lut ? doc.filter.strength : 0, smooth: 0, whiten: 0, face };
+  const fx = !p.original && doc.fx ? { id: doc.fx.id, amount: doc.fx.amount, time } : null;
+  return { lut, intensity: lut ? doc.filter.strength : 0, smooth: 0, whiten: 0, face, fx };
 }
 
 /** Draws `src` rotated clockwise by `rot` into `stage` (sized to the rotated dimensions, scaled by `scale`). */
@@ -136,6 +137,7 @@ export class VideoEngine {
     this.video.playbackRate = doc.speed;
     if (faceNeeded(p) || p.track) void this.ensureTracker().catch(() => undefined);
     if (p.sticker) void this.renderer.face.preloadSticker(p.sticker).catch(() => undefined);
+    if (doc.fx) void this.renderer.preloadEffects([doc.fx.id]);
     if (this.pos < doc.start || this.pos > doc.end) this.seek(doc.start);
   }
 
@@ -207,7 +209,7 @@ export class VideoEngine {
         this.onFaces?.(f);
       }
     }
-    this.renderer.render(source as TexImageSource, w, h, renderParams(this.params, this.faces));
+    this.renderer.render(source as TexImageSource, w, h, renderParams(this.params, this.faces, Math.max(0, doc.reverse ? doc.end - this.pos : this.pos - doc.start) / 1000));
   }
 
   /** Current frame as a canvas (thumbnails for the Retouch face list). */
@@ -253,13 +255,14 @@ export class VideoEngine {
     const f = filterByKey(doc.filter.key);
     const lut = f ? lutFor(f, true, true) : undefined;
     if (lut) await r.loadLut(lut);
+    await r.preloadEffects([doc.fx?.id]);
     if (faceNeeded(p)) await this.ensureTracker().catch(() => undefined);
     const stage = document.createElement("canvas");
-    const frame = (src: CanvasImageSource, w: number, h: number) => {
+    const frame = (src: CanvasImageSource, w: number, h: number, time: number) => {
       let s: CanvasImageSource = src, fw = w, fh = h;
       if (doc.rotation) { drawRotated(stage, src, w, h, doc.rotation); s = stage; fw = stage.width; fh = stage.height; }
       const faces = this.tracker && faceNeeded(p) ? this.tracker.detect(s as HTMLCanvasElement) : [];
-      r.render(s as TexImageSource, fw, fh, renderParams(p, faces));
+      r.render(s as TexImageSource, fw, fh, renderParams(p, faces, time));
     };
 
     const stream = canvas.captureStream(30);
@@ -288,7 +291,7 @@ export class VideoEngine {
     try {
       if (doc.reverse && this.reverse) {
         const fr = this.reverse;
-        frame(fr.frames[0], fr.frames[0].width, fr.frames[0].height);
+        frame(fr.frames[0], fr.frames[0].width, fr.frames[0].height, 0);
         rec.start(250);
         const t0 = performance.now();
         await new Promise<void>((res) => {
@@ -297,7 +300,7 @@ export class VideoEngine {
             const el = (performance.now() - t0) * doc.speed;
             const idx = Math.floor(el / fr.frameMs);
             if (idx >= fr.frames.length) return res();
-            frame(fr.frames[idx], fr.frames[idx].width, fr.frames[idx].height);
+            frame(fr.frames[idx], fr.frames[idx].width, fr.frames[idx].height, (idx * fr.frameMs) / 1000);
             onProgress(Math.min(1, el / (doc.end - doc.start)));
             requestAnimationFrame(step);
           };
@@ -307,7 +310,7 @@ export class VideoEngine {
         v.currentTime = doc.start / 1000;
         await new Promise<void>((res) => { v.onseeked = () => res(); });
         v.playbackRate = doc.speed;
-        frame(v, sw, sh);
+        frame(v, sw, sh, 0);
         rec.start(250);
         await v.play();
         await new Promise<void>((res) => {
@@ -315,7 +318,7 @@ export class VideoEngine {
           const step = () => {
             if (signal.cancelled) return res();
             const t = v.currentTime * 1000;
-            frame(v, sw, sh);
+            frame(v, sw, sh, Math.max(0, t - doc.start) / 1000);
             onProgress(Math.min(1, (t - doc.start) / (doc.end - doc.start)));
             if (t >= doc.end || v.ended) return res();
             if (vv.requestVideoFrameCallback) vv.requestVideoFrameCallback(step); else requestAnimationFrame(step);

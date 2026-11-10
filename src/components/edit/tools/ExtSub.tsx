@@ -11,10 +11,11 @@ import { ManualSkinPage, PaintPage } from "./portrait/Brushes";
 import { EyeLightPage, FacePage, IconListPage, MakeupPage, VolumePage } from "./portrait/FaceTools";
 import { HairColorPage, HdSkinPage } from "./AiPortrait";
 import { LiquifyPage } from "./portrait/Liquify";
+import { AiHairPage } from "./AiHair";
 
 export type ExtPage =
   | "remove" | "generativefill" | "mosaic" | "enhance" | "dslr" | "cutout"
-  | "RESHAPE" | "FACE_RATIO" | "RESHAPE3D" | "RETOUCH" | "MAKEUP" | "HDSKIN" | "SKIN_RETOUCH" | "BODY" | "PAINT" | "EYELIGHT" | "HAIRCOLOR" | "HAIRVOLUME";
+  | "RESHAPE" | "FACE_RATIO" | "RESHAPE3D" | "RETOUCH" | "MAKEUP" | "HDSKIN" | "SKIN_RETOUCH" | "BODY" | "PAINT" | "EYELIGHT" | "HAIRCOLOR" | "HAIRVOLUME" | "AI_HAIR";
 
 export const isExtSub = (s: unknown): s is `x:${string}` => typeof s === "string" && s.startsWith("x:");
 
@@ -37,6 +38,7 @@ export function ExtSub({ sub }: { sub: string }) {
     case "EYELIGHT": return <EyeLightPage />;
     case "HAIRCOLOR": return <HairColorPage />;
     case "HAIRVOLUME": return <VolumePage />;
+    case "AI_HAIR": return <AiHairPage />;
     default: return null;
   }
 }

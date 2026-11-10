@@ -29,6 +29,8 @@ export function renderParams(doc: Doc): RenderParams {
     whiten: 0,
     tone: { coolWarm: b.coolWarm, tanLight: Math.max(-1, Math.min(1, b.tanLight + extraWhiten)), skinTone: b.skinTone, skinToneValue: b.skinToneValue },
     edit,
+    // photos render effects at time 0, so the preview and the saved file match
+    fx: doc.fx ? { id: doc.fx.id, amount: doc.fx.amount, time: 0 } : null,
   };
 }
 
@@ -452,6 +454,7 @@ export class Preview {
   get size() { return this.src ? [this.src.width, this.src.height] as const : [0, 0] as const; }
   private lutWait = new Map<string, Promise<void>>();
   private lutDone = new Set<string>();
+  private fxAsked = new Set<string>();
   /**
    * Render the photo pass only (no border/layers). A filter table that isn't loaded yet renders without it;
    * `onLutReady` is called once it has loaded so the caller can render again.
@@ -465,6 +468,11 @@ export class Preview {
       let w = this.lutWait.get(name);
       if (!w) { w = this.renderer.loadLut(name).then(() => { this.lutDone.add(name); }); this.lutWait.set(name, w); }
       if (onLutReady) void w.then(onLutReady);
+    }
+    // an effect's overlay texture that isn't loaded yet: render again once it is
+    if (p.fx && onLutReady && !this.fxAsked.has(p.fx.id) && !this.renderer.effectReady(p.fx.id)) {
+      this.fxAsked.add(p.fx.id);
+      void this.renderer.preloadEffects([p.fx.id]).then(onLutReady);
     }
     // face engine stage (Face / Makeup / Body / Reshape ...), additive: returns this.src when nothing applies
     this.renderer.render(faceStageSource(this.base, this.src, doc.beauty.face), nw, nh, p);
@@ -489,6 +497,7 @@ export async function exportDoc(base: HTMLCanvasElement, doc: Doc): Promise<{ bl
     const p = renderParams(doc);
     await r.preloadEditTextures(doc.beauty.skinTone ? [doc.beauty.skinTone] : []);
     if (p.lut) await r.loadLut(p.lut);
+    await r.preloadEffects([p.fx?.id]);
     // stamps must be decoded before compositing
     await Promise.all(doc.layers.filter((l) => l.kind === "stamp").map((l) => new Promise<void>((res) => {
       const img = stampImage((l as { src: string }).src, () => res());

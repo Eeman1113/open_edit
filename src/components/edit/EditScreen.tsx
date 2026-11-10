@@ -15,6 +15,7 @@ import { AlertDialog, MENU, TAB_H, TOP_H } from "./ui";
 import { sampleBlob } from "./devSample";
 import { SavedImage, SavedPage } from "./SavedPage";
 import { FilterPanel } from "./panels/Filter";
+import { EffectsPanel } from "./panels/Effects";
 import { AdjustPanel, CurvesPanel, HslPanel, SplitPanel } from "./panels/Adjust";
 import { CropTool, ToolsPanel } from "./panels/Tools";
 import { AutoSkinPanel, PortraitPanel, SkinTonePanel } from "./panels/Portrait";
@@ -30,7 +31,7 @@ const MAX_ZOOM = 16, MIN_ZOOM = 0.4;
 /** Dev-only init (headless proofs). */
 export interface DevInit { sample: boolean; tab?: string; sub?: string; adjust?: string; filter?: string; save?: boolean; share?: boolean }
 
-const photoKey = (doc: Doc) => JSON.stringify([doc.base, doc.filter, doc.adjust, doc.curves, doc.hsl, doc.split, doc.beauty]);
+const photoKey = (doc: Doc) => JSON.stringify([doc.base, doc.filter, doc.adjust, doc.curves, doc.hsl, doc.split, doc.beauty, doc.fx]);
 const scaleText = (s: number) => (s >= 1 ? `${Math.round(s * 100)}%` : `${(Math.round(s * 1000) / 10).toFixed(1)}%`);
 
 /** `?tool=` values that open a tool page straight away (tools by key, portrait pages by id). */
@@ -484,6 +485,7 @@ export function EditScreen({ id, tool, dev }: { id: string; tool?: string; dev?:
         {!sub && tab === "PORTRAIT" && <PortraitPanel />}
         {!sub && tab === "TOOLS" && <ToolsPanel />}
         {!sub && tab === "FILTER" && <FilterPanel />}
+        {!sub && tab === "EFFECTS" && <EffectsPanel />}
         {!sub && tab === "ADJUST" && <AdjustPanel />}
         {!sub && tab === "STICKER" && <ArFilterPanel onExit={exitFullPage} />}
         {!sub && tab === "STAMP" && <LayerPanel kind="stamp" />}

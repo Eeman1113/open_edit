@@ -4,6 +4,7 @@
 // engine tables by id (kind "table").
 import { getAsset } from "@/lib/assets";
 import { BLUR_FRAG, CUBE_GLSL, DOWN_FRAG, EDIT_FRAG, EDIT_UNIFORMS, TONE_FRAG, TONE_UNIFORMS } from "./editShaders";
+import { effectActive, effectById, effectFrag, FX_UNIFORMS, type EffectParams } from "./effects";
 import { FacePipeline, faceParamsActive, type FaceRenderParams } from "../face/pipeline";
 import type { FaceData } from "../face/landmarks";
 
@@ -163,6 +164,8 @@ export interface RenderParams {
   crop?: { x: number; y: number; w: number; h: number };
   /** Face engine passes (reshape / makeup / liquify / stickers), run after skin smoothing and before the colour cube. */
   face?: FaceRenderParams;
+  /** Whole-image creative effect (src/lib/gl/effects.ts), run as the very last pass. */
+  fx?: EffectParams | null;
 }
 
 type Prog = { p: WebGLProgram; u: Record<string, WebGLUniformLocation | null> };
@@ -191,6 +194,7 @@ export class Renderer {
   private facePipe?: FacePipeline;
   private faceFailed = false;
   private curvesTex?: WebGLTexture;
+  private fxProgs = new Map<string, Prog>();
   private luts = new Map<string, WebGLTexture>();
   private lutLoading = new Set<string>();
   private fbos: { fb: WebGLFramebuffer; tex: WebGLTexture; w: number; h: number }[] = [];
@@ -347,6 +351,8 @@ export class Renderer {
       });
     });
     if (edit) extra.push((i, t) => this.editPass(i, t, w, h, edit));
+    const fx = params.fx;
+    if (effectActive(fx)) extra.push((i, t) => this.fxPass(i, t, w, h, fx));
 
     const f1 = extra.length ? this.fbo(1, w, h) : null;
     const cube = params.lut ? this.luts.get(params.lut) : undefined;
@@ -495,6 +501,49 @@ export class Renderer {
     });
   }
 
+  /** Overlay texture of an effect (asset kind "fx"; starts loading on first use, undefined until ready). */
+  private fxTexture(id: string, repeat: boolean) {
+    const key = `fx:${id}`;
+    if (this.luts.has(key)) return this.luts.get(key)!;
+    void this.loadLut(key, getAsset("fx", id)).then(() => { if (repeat) this.setRepeat(key); });
+    return undefined;
+  }
+
+  /** Load the overlay texture of the given effects; resolves when ready (exports wait for it). */
+  preloadEffects(ids: (string | null | undefined)[]): Promise<void> {
+    return Promise.all(ids.map((id) => {
+      const d = effectById(id);
+      if (!d?.tex) return undefined;
+      const key = `fx:${d.tex}`;
+      return this.loadLut(key, getAsset("fx", d.tex)).then(() => { if (d.repeat) this.setRepeat(key); });
+    })).then(() => undefined);
+  }
+
+  /** True when the effect can render completely (its overlay texture, if any, is loaded). */
+  effectReady(id: string): boolean {
+    const d = effectById(id);
+    return !d?.tex || this.luts.has(`fx:${d.tex}`);
+  }
+
+  private fxPass(input: WebGLTexture, target: WebGLFramebuffer | null, w: number, h: number, fx: EffectParams) {
+    const gl = this.gl;
+    const d = effectById(fx.id)!;
+    let p = this.fxProgs.get(d.id);
+    if (!p) { p = this.program(effectFrag(d), FX_UNIFORMS); this.fxProgs.set(d.id, p); }
+    const prog = p;
+    // fbo slots 6/7: clear of the ping-pong pair (0/1) and the editor's blur slots (2..5)
+    const bl = d.blur ? this.blurred(input, w, h, d.blur, 6) : input;
+    const tex = d.tex ? this.fxTexture(d.tex, !!d.repeat) : undefined;
+    this.draw(prog, input, target, w, h, [1, 1], false, () => {
+      this.bindTex(1, bl, prog.u.blurTex);
+      this.bindTex(2, tex, prog.u.fxTex);
+      gl.uniform2f(prog.u.resolution, w, h);
+      gl.uniform1f(prog.u.amount, Math.min(1, Math.max(0, fx.amount)));
+      gl.uniform1f(prog.u.time, fx.time ?? 0);
+      gl.uniform1f(prog.u.hasTex, tex ? 1 : 0);
+    });
+  }
+
   /** The face pass chain (created on first use); exposes its image cache for preloading sticker / makeup textures. */
   get face(): FacePipeline {
     this.facePipe ??= new FacePipeline(this.gl);
@@ -514,10 +563,11 @@ export class Renderer {
   dispose() {
     const gl = this.gl;
     for (const t of this.luts.values()) gl.deleteTexture(t);
-    for (const f of this.fbos) { gl.deleteFramebuffer(f.fb); gl.deleteTexture(f.tex); }
+    for (const f of this.fbos) { if (!f) continue; gl.deleteFramebuffer(f.fb); gl.deleteTexture(f.tex); }
     gl.deleteTexture(this.srcTex);
     gl.deleteBuffer(this.quad);
-    for (const p of [this.smoothProg, this.cubeProg, this.adjust]) gl.deleteProgram(p.p);
+    for (const p of [this.smoothProg, this.cubeProg, this.adjust, ...this.fxProgs.values()]) gl.deleteProgram(p.p);
+    this.fxProgs.clear();
     this.facePipe?.dispose();
     this.facePipe = undefined;
     this.luts.clear();

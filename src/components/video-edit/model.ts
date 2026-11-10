@@ -2,7 +2,7 @@
 import type { IconName } from "@/components/ui";
 import type { WarpOp } from "@/lib/face";
 
-export type TabId = "VideoEdit" | "Speed" | "Music" | "Reshape" | "Retouch" | "Filter" | "Frame";
+export type TabId = "VideoEdit" | "Speed" | "Music" | "Reshape" | "Retouch" | "Filter" | "Effects" | "Frame";
 
 export interface TabDef {
   id: TabId;
@@ -16,6 +16,7 @@ export const TABS: TabDef[] = [
   { id: "VideoEdit", icon: "cutout", title: "Trim" },
   { id: "Speed", icon: "speed", title: "Speed" },
   { id: "Filter", icon: "filter", title: "Filters" },
+  { id: "Effects", icon: "sparkles", title: "Effects" },
   { id: "Frame", icon: "effects", title: "Face FX" },
   { id: "Reshape", icon: "face", title: "Face shape", twoDepth: true },
   { id: "Retouch", icon: "hand", title: "Liquify", twoDepth: true },
@@ -57,6 +58,8 @@ export interface VDoc {
   reshape: Reshape;
   /** Liquify: drag warps anchored to the face so they follow it. */
   retouch: WarpOp[];
+  /** Whole-image creative effect (src/lib/gl/effects.ts), applied to every frame; null = none. */
+  fx: { id: string; amount: number } | null;
 }
 
 export const initialDoc = (durationMs: number): VDoc => ({
@@ -70,6 +73,7 @@ export const initialDoc = (durationMs: number): VDoc => ({
   stickerId: null,
   reshape: { re: {} },
   retouch: [],
+  fx: null,
 });
 
 export const reshapeActive = (r: Reshape) => (!!r.shape && r.shape.v > 0.001) || Object.values(r.re).some((v) => Math.abs(v) > 0.001);
@@ -77,7 +81,7 @@ export const reshapeActive = (r: Reshape) => (!!r.shape && r.shape.v > 0.001) ||
 export function docModified(a: VDoc, durationMs: number): boolean {
   const b = initialDoc(durationMs);
   return a.start !== b.start || a.end !== b.end || a.speed !== 1 || a.reverse || a.muted || a.rotation !== 0
-    || a.filter.key !== "ORIGINAL" || a.stickerId !== null || reshapeActive(a.reshape) || a.retouch.length > 0;
+    || a.filter.key !== "ORIGINAL" || a.stickerId !== null || reshapeActive(a.reshape) || a.retouch.length > 0 || !!a.fx;
 }
 
 /** Whole seconds as "mm:ss" (or "hh:mm:ss" from one hour). */

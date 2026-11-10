@@ -5,12 +5,13 @@ import type { EditAdjust } from "@/lib/gl/renderer";
 
 /* ---------------------------------------------------------------- tabs */
 
-export type TabId = "PORTRAIT" | "TOOLS" | "FILTER" | "ADJUST" | "STICKER" | "STAMP" | "TEXT" | "BRUSH" | "BORDER";
+export type TabId = "PORTRAIT" | "TOOLS" | "FILTER" | "EFFECTS" | "ADJUST" | "STICKER" | "STAMP" | "TEXT" | "BRUSH" | "BORDER";
 
 /** Editor sections, in tab-bar order. STICKER is the face-filter (AR) page. */
 export const TABS: { id: TabId; label: string; icon: IconName }[] = [
   { id: "TOOLS", label: "Tools", icon: "tools" },
   { id: "FILTER", label: "Filters", icon: "filter" },
+  { id: "EFFECTS", label: "Effects", icon: "sparkles" },
   { id: "ADJUST", label: "Adjust", icon: "edit" },
   { id: "PORTRAIT", label: "Portrait", icon: "face" },
   { id: "STICKER", label: "Face FX", icon: "effects" },
@@ -209,6 +210,8 @@ export interface Doc {
   beauty: Beauty;
   border: Border;
   layers: Layer[];
+  /** Whole-image creative effect (src/lib/gl/effects.ts); null = none. */
+  fx?: { id: string; amount: number } | null;
 }
 
 export const ZERO_ADJ: Record<AdjustKey, number> = {
@@ -225,6 +228,7 @@ export const initialDoc = (): Doc => ({
   beauty: DEFAULT_BEAUTY,
   border: DEFAULT_BORDER,
   layers: [],
+  fx: null,
 });
 
 /* ---------------------------------------------------------------- curves math (monotone cubic spline) */
@@ -357,6 +361,7 @@ export const PORTRAIT: { key: string; label: string; icon: IconName }[] = [
   { key: "EYELIGHT", label: "Eye light", icon: "eye" },
   { key: "HAIRCOLOR", label: "Hair colour", icon: "hair" },
   { key: "HAIRVOLUME", label: "Volume", icon: "wind" },
+  { key: "AI_HAIR", label: "AI Hair", icon: "sparkles" },
 ];
 
 /** Auto retouch items. `web` = a whole-photo pixel pass; the others are applied per face. */

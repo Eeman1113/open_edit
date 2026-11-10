@@ -16,6 +16,7 @@ import { DOCK_H, MAX_MS, STR, TABS, TAB_H, docModified, initialDoc, type Reshape
 import { TrimPanel } from "./TrimPanel";
 import { MusicList, MusicPanel, SpeedPanel } from "./panels";
 import { VideoFilterPanel } from "./FilterPanel";
+import { VideoEffectsPanel } from "./EffectsPanel";
 import { ArFilterPanel, BeautyPanel, RetouchPanel, dragToOp } from "./FacePanels";
 import { LoadingLayer, PercentDialog } from "./ui";
 import { SaveConfirm, ShareBar } from "./SaveConfirm";
@@ -23,7 +24,7 @@ import { SaveConfirm, ShareBar } from "./SaveConfirm";
 const TOP_H = 52;
 const PANEL_H = DOCK_H - TAB_H;
 
-export interface DevInit { sample?: boolean; tab?: string; save?: boolean; share?: boolean; filter?: string; speed?: number; reverse?: boolean; sticker?: number; music?: boolean }
+export interface DevInit { sample?: boolean; tab?: string; save?: boolean; share?: boolean; filter?: string; fx?: string; speed?: number; reverse?: boolean; sticker?: number; music?: boolean }
 
 function faceThumb(snap: HTMLCanvasElement, f: FaceData): string {
   let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
@@ -101,12 +102,13 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
       if (dev?.filter) d0.filter = { key: dev.filter, strength: 0.8 };
       if (dev?.speed) d0.speed = dev.speed;
       if (dev?.sticker) d0.stickerId = dev.sticker;
+      if (dev?.fx) d0.fx = { id: dev.fx, amount: 0.8 };
       setDoc(d0);
       if (duration > MAX_MS) setTip5min(true);
       setStatus("ok");
     })().catch(() => alive && setStatus("error"));
     return () => { alive = false; if (url) URL.revokeObjectURL(url); };
-  }, [id, dev?.sample, dev?.filter, dev?.speed, dev?.sticker]);
+  }, [id, dev?.sample, dev?.filter, dev?.fx, dev?.speed, dev?.sticker]);
 
   /* ---------------------------------------------------------------- engine */
   useEffect(() => {
@@ -400,6 +402,14 @@ export function VideoEditScreen({ id, dev }: { id: string; dev?: DevInit }) {
               value={live.filter} sliderBottom={DOCK_H} panelBottom={TAB_H} panelH={PANEL_H}
               onChange={(f) => update((x) => ({ ...x, filter: f }))}
               onCommit={(f) => update((x) => ({ ...x, filter: f }))}
+            />
+          )}
+          {tab === "Effects" && (
+            <VideoEffectsPanel
+              value={live.fx} sliderBottom={DOCK_H} panelBottom={TAB_H} panelH={PANEL_H}
+              snapshot={() => engineRef.current?.snapshot(360) ?? null} thumbKey={`${src.url}|${live.rotation}`}
+              onChange={(f) => update((x) => ({ ...x, fx: f }))}
+              onCommit={(f) => update((x) => ({ ...x, fx: f }))}
             />
           )}
           {(tab === "Speed" || tab === "Music" || tab === "Frame") && (

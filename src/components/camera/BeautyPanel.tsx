@@ -167,7 +167,7 @@ export function BeautyPanel({ state, onChange, onClose, onOriginal }: Props) {
             <Tabs look="segment" className="min-w-0 flex-1" items={TABS} value={tab} onChange={(t) => onChange("tab", t)} />
           )}
           {makeupCat?.flip ? (
-            <IconButton icon="mirror" label="Mirror" size={36} iconSize={20} active={!!state.beautyMarkFlip} onClick={() => onChange("beautyMarkFlip", !state.beautyMarkFlip)} />
+            <IconButton icon="flip-h" label="Mirror" size={36} iconSize={20} active={!!state.beautyMarkFlip} onClick={() => onChange("beautyMarkFlip", !state.beautyMarkFlip)} />
           ) : !sub ? (
             <IconButton icon="reset" label="Reset" size={36} iconSize={20} className="text-fg-2" onClick={() => setResetTab(tab)} />
           ) : <span className="w-9" />}

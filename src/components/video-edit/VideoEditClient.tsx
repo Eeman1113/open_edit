@@ -13,13 +13,14 @@ const VideoEditScreen = dynamic(() => import("./VideoEditScreen").then((m) => m.
 export function VideoEditClient() {
   const sp = useSearchParams();
   const id = sp.get("id") ?? "";
-  // Dev-only proof hooks with the pack's sample clip: ?__sample=1&__tab=Filter&__filter=cinema&__speed=2&__reverse=1&__sticker=<id>&__music=1&__save=1&__share=1
+  // Dev-only proof hooks with the pack's sample clip: ?__sample=1&__tab=Filter&__filter=cinema&__fx=rain&__speed=2&__reverse=1&__sticker=<id>&__music=1&__save=1&__share=1
   let dev: DevInit | undefined;
   if (process.env.NODE_ENV !== "production" && sp.get("__sample")) {
     dev = {
       sample: true,
       tab: sp.get("__tab") ?? undefined,
       filter: sp.get("__filter") ?? undefined,
+      fx: sp.get("__fx") ?? undefined,
       speed: sp.get("__speed") ? Number(sp.get("__speed")) : undefined,
       sticker: sp.get("__sticker") ? Number(sp.get("__sticker")) : undefined,
       reverse: sp.get("__reverse") === "1",

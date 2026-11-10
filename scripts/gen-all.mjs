@@ -9,8 +9,9 @@ import { generate as collage } from "./gen-collage.mjs";
 import { generate as fonts } from "./gen-fonts.mjs";
 import { generate as feed } from "./gen-feed.mjs";
 import { generate as music } from "./gen-music.mjs";
+import { generate as effects } from "./gen-effects.mjs";
 
-const steps = [["luts", luts], ["stickers", stickers], ["brushes", brushes], ["collage", collage], ["fonts", fonts], ["feed", feed], ["music", music]];
+const steps = [["luts", luts], ["stickers", stickers], ["brushes", brushes], ["collage", collage], ["fonts", fonts], ["feed", feed], ["music", music], ["effects", effects]];
 for (const [name, run] of steps) {
   const t = Date.now();
   const r = await run();
