@@ -25,6 +25,8 @@ export default async function flowFaceFx(s) {
     if (!items.length) throw new Error("no beauty items");
     await s.tap({ sel: `[data-beauty="${items[Math.min(2, items.length - 1)]}"]` }, { settle: 800 });
     if (await s.ev(`!!document.querySelector('[role=slider]')`)) await slide(s, 0.95, { settle: 1500 });
+    // an item with its own list (face styles) opens a sub-page: go back to the tabs
+    if (!(await s.exists("Makeup"))) await s.click({ label: "Back" }, { settle: 800 });
     await s.tap("Makeup", { settle: 900 });
     const mk = await s.ev(`[...document.querySelectorAll('[data-beauty]')].map(b => b.getAttribute('data-beauty'))`);
     if (mk.length > 1) await s.tap({ sel: `[data-beauty="${mk[1]}"]` }, { settle: 1200 });

@@ -100,4 +100,34 @@ Screenshots of such a run show real faces. Before sharing them, pixelate the fac
 
 ## Latest results
 
-<!-- results -->
+Run on 2026-11-10 against `next dev` (Node 24, headless Chrome with SwiftShader WebGL), with a two-person photo as
+`E2E_PHOTO`, a fake camera made from it (`E2E_Y4M`) and a 3 s face clip (`E2E_FACE_VIDEO`). 230 of 230 steps pass.
+Flows 15 and 18 are from a re-run after a test fix (15: leave the face-styles sub-page before switching tabs) and after
+regenerating a stale local `public/api-static` snapshot that had been built for the GitHub Pages base path (18); flow
+04 is from a re-run after fixing Edit on a video review (it opened the photo editor).
+
+| # | Flow | Steps passed | Time (s) |
+| --- | --- | --- | --- |
+| 01 | launch | 2 / 2 | 12 |
+| 02 | camera-controls | 15 / 15 | 91 |
+| 03 | camera-capture | 9 / 9 | 105 |
+| 04 | video-record | 8 / 8 | 44 |
+| 05 | gnb-tabs | 6 / 6 | 23 |
+| 06 | home | 9 / 9 | 52 |
+| 07 | discover | 15 / 15 | 56 |
+| 08 | ai | 9 / 9 | 114 |
+| 09 | my-settings | 11 / 11 | 72 |
+| 10 | gallery | 10 / 10 | 49 |
+| 11 | photo-editor | 40 / 40 | 581 |
+| 12 | video-editor | 13 / 13 | 152 |
+| 13 | deeplinks | 23 / 23 | 81 |
+| 14 | back-nav | 11 / 11 | 72 |
+| 15 | face-fx | 7 / 7 | 94 |
+| 16 | back-key | 14 / 14 | 186 |
+| 17 | creators | 14 / 14 | 116 |
+| 18 | api | 11 / 11 | 28 |
+| 19 | clear-data | 3 / 3 | 19 |
+| | **Total** | **230 / 230** | |
+
+Static checks on the same tree: `tsc --noEmit`, `eslint src scripts`, `audit-provenance` (570 files),
+`licenses --check` (48 runtime packages) and `audit:secrets` (285 client chunks of `next dev`) all pass.

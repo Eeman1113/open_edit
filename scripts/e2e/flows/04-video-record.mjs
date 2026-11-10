@@ -51,7 +51,8 @@ export default async function flowVideoRecord(s) {
   });
   await s.step("video-edit", async () => {
     await s.click("Edit", { settle: 3000 });
-    await s.waitFor(`location.pathname === '/video-edit' || location.pathname === '/edit'`, { timeout: 15000, msg: "video editor route" });
+    await s.waitFor(`location.pathname === '/video-edit'`, { timeout: 15000, msg: "video editor route" });
+    await s.waitFor(`!!document.querySelector('[aria-label="Video tools"]')`, { timeout: 15000, msg: "video editor open" });
   });
   await s.step("back-to-camera", async () => {
     await s.goto("/"); await openCamera(s);

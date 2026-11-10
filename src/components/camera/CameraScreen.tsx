@@ -1170,7 +1170,7 @@ export function CameraScreen() {
       {screenFlash && <div className="absolute inset-0 z-50" style={{ background: "#fff4dc" }} />}
 
       {capture && (
-        <ConfirmScreen capture={capture} rect={vis} ratio={ratio} autoSave={autoSave} onBack={closeConfirm} onEdit={(id) => router.push(`/edit?id=${id}`)} />
+        <ConfirmScreen capture={capture} rect={vis} ratio={ratio} autoSave={autoSave} onBack={closeConfirm} onEdit={(id) => router.push(capture.isVideo ? `/video-edit?id=${encodeURIComponent(id)}` : `/edit?id=${encodeURIComponent(id)}`)} />
       )}
 
       {perm === "denied" && (
