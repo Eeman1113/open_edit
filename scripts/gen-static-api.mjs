@@ -93,3 +93,11 @@ for (const [name, body] of Object.entries(files)) {
   bytes += text.length;
 }
 console.log(`gen-static-api: ${Object.keys(files).length} files, ${(bytes / 1024).toFixed(0)} KB → public/api-static (base "${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}")`);
+
+// Static export only: the web manifest route (src/app/manifest.ts) is a .ts route, which the export build skips
+// (pageExtensions tsx/jsx), so write the same manifest out as a plain file with the export's base path.
+if (process.env.OE_STATIC_EXPORT === "1") {
+  const { default: manifest } = await import(pathToFileURL(join(SRC, "app", "manifest.ts")).href);
+  writeFileSync(join(ROOT, "public", "manifest.webmanifest"), JSON.stringify(manifest(), null, 2));
+  console.log("gen-static-api: wrote public/manifest.webmanifest");
+}
